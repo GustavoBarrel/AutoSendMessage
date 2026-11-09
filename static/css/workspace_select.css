@@ -1,0 +1,150 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --picker-bg: #141414;
+  --picker-card-bg: #1f1f1f;
+  --picker-text: #e5e5e5;
+  --picker-text-dim: #808080;
+  --azul: #0d47a1;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body.picker-page {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Inter', sans-serif;
+  background: var(--picker-bg);
+  color: var(--picker-text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3rem 1.5rem;
+}
+
+.picker-header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.picker-logo {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--picker-text);
+  text-decoration: none;
+  letter-spacing: -0.03em;
+}
+
+.picker-title {
+  margin: 1rem 0 0;
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--picker-text-dim);
+}
+
+.picker-cards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.5rem;
+  max-width: 900px;
+}
+
+.picker-card-form {
+  margin: 0;
+}
+
+.picker-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 160px;
+  height: 160px;
+  padding: 1rem;
+  background: var(--picker-card-bg);
+  border: 3px solid transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+  text-decoration: none;
+  color: inherit;
+}
+
+.picker-card:hover {
+  transform: scale(1.05);
+  border-color: var(--picker-text-dim);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.picker-card-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.picker-card-nome {
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.picker-gerenciar {
+  margin-top: 3rem;
+}
+
+.picker-gerenciar-btn {
+  display: inline-block;
+  padding: 0.6rem 1.5rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--picker-text-dim);
+  background: transparent;
+  border: 1px solid var(--picker-text-dim);
+  border-radius: 6px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.picker-gerenciar-btn:hover {
+  color: var(--picker-text);
+  border-color: var(--picker-text);
+}
+
+.picker-empty {
+  text-align: center;
+  color: var(--picker-text-dim);
+  margin-top: 2rem;
+}
+
+.picker-empty p {
+  margin-bottom: 1rem;
+}
+
+.picker-empty .picker-gerenciar-btn {
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 480px) {
+  .picker-card {
+    width: 140px;
+    height: 140px;
+  }
+  .picker-card-avatar {
+    width: 64px;
+    height: 64px;
+    font-size: 2rem;
+  }
+}

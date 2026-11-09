@@ -1,0 +1,21 @@
+# Ambiente
+.venv/
+.venv_ci/
+venv/
+.env
+.env.evolution
+*.pyc
+__pycache__/
+db.sqlite3
+*.log
+
+# Uploads locais (mídias de campanha)
+/media/
+/media/campaign_media/
+
+# Ferramentas e artefatos locais
+.playwright-mcp/
+staticfiles/
+.ruff_cache/
+.coverage
+htmlcov/

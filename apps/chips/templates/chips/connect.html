@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Conectar chip {{ chip.name }} - AutoSendMessage{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Conectar chip: {{ chip.name }}</h2>
+        <a href="{% url 'dashboards:home' %}" class="btn-secondary">Voltar</a>
+    </div>
+    <div class="section-body">
+        <p class="form-info">Use esta tela para confirmar que o chip está conectado ao WhatsApp. Escaneie o QR code no celular (WhatsApp → Aparelhos conectados → Conectar aparelho).</p>
+        {% if connect_data %}
+            <div class="chip-connect-box">
+                {% if connect_data.base64 %}
+                <div class="qrcode-wrap">
+                    <img id="qrcode-img" src="{{ connect_data.base64 }}" alt="QR Code para conectar WhatsApp" style="max-width: 260px; height: auto;">
+                </div>
+                <p class="chip-connect-hint">Abra o WhatsApp no celular → Configurações → Aparelhos conectados → Conectar aparelho e escaneie o QR acima.</p>
+                {% elif connect_data.code %}
+                <div class="qrcode-wrap">
+                    <canvas id="qrcode-canvas" aria-label="QR Code para conectar WhatsApp"></canvas>
+                </div>
+                <p class="chip-connect-hint">Abra o WhatsApp no celular → Configurações → Aparelhos conectados → Conectar aparelho e escaneie o QR acima.</p>
+                {% elif connect_data.pairingCode %}
+                <p class="chip-connect-hint chip-connect-fallback">O QR não veio na resposta. Use o <strong>código de pareamento</strong> abaixo no celular: WhatsApp → Aparelhos conectados → <strong>Vincular com número de telefone</strong>.</p>
+                {% else %}
+                <div id="qrcode-polling-wrap">
+                    <p class="chip-connect-hint chip-connect-fallback" id="qrcode-wait-msg">Aguardando QR da Evolution… (webhook ou atualização a cada 3 s)</p>
+                    <div class="qrcode-wrap" id="qrcode-wrap-poll" style="display: none;">
+                        <canvas id="qrcode-canvas" aria-label="QR Code para conectar WhatsApp"></canvas>
+                        <img id="qrcode-img" alt="QR Code" style="display: none; max-width: 260px; height: auto;">
+                    </div>
+                </div>
+                {% endif %}
+                {% if connect_data.pairingCode %}
+                <p class="chip-connect-pairing"><strong>Código de pareamento:</strong> <code>{{ connect_data.pairingCode }}</code></p>
+                {% endif %}
+            </div>
+            <p class="form-info" style="margin-top: 1rem;">Após conectar, o chip aparecerá como “conectado” na Evolution API. Você será redirecionado para a página inicial.</p>
+            <script>
+            (function() {
+                var statusUrl = "{% url 'chips:chip_connect_status' chip.pk %}";
+                var successUrl = "{% url 'chips:chip_connect_success' chip.pk %}";
+                var interval = setInterval(function() {
+                    fetch(statusUrl).then(function(r) { return r.json(); }).then(function(data) {
+                        if (data && data.state === 'open') {
+                            clearInterval(interval);
+                            window.location.href = successUrl;
+                        }
+                    }).catch(function() {});
+                }, 2500);
+            })();
+            </script>
+            {% if connect_data.base64 %}
+            {% elif connect_data.code %}
+            {{ connect_data.code|json_script:"pairingCodeData" }}
+            <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+            <script>
+            (function() {
+                var el = document.getElementById('pairingCodeData');
+                var code = null;
+                if (el) try { code = JSON.parse(el.textContent); } catch (e) {}
+                if (code && typeof QRCode !== 'undefined') {
+                    var canvas = document.getElementById('qrcode-canvas');
+                    if (canvas) QRCode.toCanvas(canvas, code, { width: 260, margin: 2 });
+                }
+            })();
+            </script>
+            {% elif not connect_data.pairingCode %}
+            <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+            <script>
+            (function() {
+                var url = "{% url 'chips:chip_connect_json' chip.pk %}";
+                var wrap = document.getElementById('qrcode-wrap-poll');
+                var canvas = document.getElementById('qrcode-canvas');
+                var img = document.getElementById('qrcode-img');
+                var msg = document.getElementById('qrcode-wait-msg');
+                function showQR(data) {
+                    if (!wrap || !msg) return;
+                    wrap.style.display = 'block';
+                    msg.textContent = 'Escaneie o QR code no celular (WhatsApp → Aparelhos conectados → Conectar aparelho).';
+                    msg.classList.remove('chip-connect-fallback');
+                    var b64 = data.base64;
+                    if (b64 && img) {
+                        img.src = (b64.indexOf('data:') === 0) ? b64 : ('data:image/png;base64,' + b64);
+                        img.style.display = 'block';
+                        if (canvas) canvas.style.display = 'none';
+                    } else if (data.code && typeof QRCode !== 'undefined' && canvas) {
+                        QRCode.toCanvas(canvas, data.code, { width: 260, margin: 2 });
+                        canvas.style.display = 'block';
+                        if (img) img.style.display = 'none';
+                    }
+                }
+                var interval = setInterval(function() {
+                    fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+                        if (data && (data.code || data.base64)) {
+                            clearInterval(interval);
+                            showQR(data);
+                        }
+                    }).catch(function() {});
+                }, 3000);
+            })();
+            </script>
+            {% endif %}
+        {% else %}
+            <div class="alert alert-warning">
+                <strong>Não foi possível obter o QR code.</strong>
+                {% if connect_error %}
+                    Ao tentar criar a instância na Evolution ocorreu: {{ connect_error }}
+                {% else %}
+                    Verifique se a Evolution API está rodando e se a URL e a API key configuradas no .env estão corretas. A instância <code>{{ chip.instance_name }}</code> deveria ter sido criada ao salvar o chip.
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}
+

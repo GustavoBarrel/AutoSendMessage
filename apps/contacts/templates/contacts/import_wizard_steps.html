@@ -1,0 +1,36 @@
+{# wizard_step: 1..5 | wizard_has_dup: on the preview screen, True if there are duplicates (next step is duplicates) | wizard_dup_skipped: on the summary screen, True if the duplicates step was skipped #}
+<div class="import-wizard" aria-label="Etapas da importação">
+    <ol class="import-wizard-steps">
+        <li class="import-wizard-step {% if wizard_step > 1 %}import-wizard-step--done{% elif wizard_step == 1 %}import-wizard-step--current{% else %}import-wizard-step--todo{% endif %}">
+            <span class="import-wizard-dot">{% if wizard_step > 1 %}✓{% else %}1{% endif %}</span>
+            <span class="import-wizard-label">Arquivo</span>
+        </li>
+        <li class="import-wizard-connector {% if wizard_step > 2 %}import-wizard-connector--done{% endif %}"></li>
+        <li class="import-wizard-step {% if wizard_step > 2 %}import-wizard-step--done{% elif wizard_step == 2 %}import-wizard-step--current{% else %}import-wizard-step--todo{% endif %}">
+            <span class="import-wizard-dot">{% if wizard_step > 2 %}✓{% else %}2{% endif %}</span>
+            <span class="import-wizard-label">Mapear</span>
+        </li>
+        <li class="import-wizard-connector {% if wizard_step > 3 %}import-wizard-connector--done{% endif %}"></li>
+        <li class="import-wizard-step {% if wizard_step > 3 %}import-wizard-step--done{% elif wizard_step == 3 %}import-wizard-step--current{% else %}import-wizard-step--todo{% endif %}">
+            <span class="import-wizard-dot">{% if wizard_step > 3 %}✓{% else %}3{% endif %}</span>
+            <span class="import-wizard-label">Conferir</span>
+        </li>
+        <li class="import-wizard-connector {% if wizard_step >= 5 and wizard_dup_skipped %}import-wizard-connector--skip{% elif wizard_step >= 4 %}import-wizard-connector--done{% endif %}"></li>
+        <li class="import-wizard-step {% if wizard_step == 4 %}import-wizard-step--current{% elif wizard_step == 5 and wizard_dup_skipped %}import-wizard-step--skipped{% elif wizard_step >= 5 %}import-wizard-step--done{% else %}import-wizard-step--todo{% endif %}">
+            <span class="import-wizard-dot">{% if wizard_step == 5 and wizard_dup_skipped %}∅{% elif wizard_step >= 5 %}✓{% elif wizard_step == 4 %}4{% else %}4{% endif %}</span>
+            <span class="import-wizard-label">Duplicatas{% if wizard_step <= 3 and not wizard_has_dup %} <span class="import-wizard-optional">(se houver)</span>{% endif %}</span>
+        </li>
+        <li class="import-wizard-connector {% if wizard_step >= 5 %}import-wizard-connector--done{% endif %}"></li>
+        <li class="import-wizard-step {% if wizard_step == 5 %}import-wizard-step--current{% else %}import-wizard-step--todo{% endif %}">
+            <span class="import-wizard-dot">5</span>
+            <span class="import-wizard-label">Importar</span>
+        </li>
+    </ol>
+    <p class="import-wizard-hint">
+        {% if wizard_step == 1 %}<strong>Etapa 1 de 5</strong> — faltam 4. Envie o Excel ou CSV; em seguida você mapeia as colunas.
+        {% elif wizard_step == 2 %}<strong>Etapa 2 de 5</strong> — faltam 3. Associe cada campo à coluna do arquivo (celular é obrigatório).
+        {% elif wizard_step == 3 %}<strong>Etapa 3 de 5</strong> — faltam {% if wizard_has_dup %}2{% else %}1{% endif %}. Confira totais, erros e duplicados.{% if wizard_has_dup %} Depois você escolhe qual linha manter por celular repetido.{% else %} Em seguida: resumo e importação.{% endif %}
+        {% elif wizard_step == 4 %}<strong>Etapa 4 de 5</strong> — falta 1. Para cada celular repetido, escolha uma linha para manter.
+        {% else %}<strong>Etapa 5 de 5</strong> — última etapa. Revise novos, conflitos e clique em <strong>Executar importação</strong>.{% endif %}
+    </p>
+</div>

@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}Importar contatos - AutoSendMessage{% endblock %}
+
+{% block extra_head %}
+<style>
+/* Main layout: upload and guide side by side */
+.import-layout {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+  margin-top: 1.75rem;
+}
+
+/* Upload card (main action) */
+.import-upload {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 1.75rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.2s ease;
+}
+
+.import-upload:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.import-upload__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.import-upload__sub {
+  margin: 0 0 1.25rem;
+  font-size: 0.92rem;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.import-upload .file-drop {
+  margin-bottom: 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.import-upload .form-actions {
+  margin-top: 0;
+}
+
+.import-modelo {
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.import-modelo__note {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  padding-left: 0.25rem;
+}
+
+.btn-modelo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #166534;
+  color: #fff;
+  padding: 0.65rem 1.25rem;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  text-decoration: none;
+  transition: background 0.2s ease, transform 0.15s ease;
+  width: fit-content;
+}
+
+.btn-modelo:hover {
+  background: #15803d;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 860px) {
+  .import-layout {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+  .import-format-hint {
+    grid-column: auto;
+  }
+  .import-upload {
+    padding: 1.5rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .import-layout {
+    margin-top: 1.25rem;
+  }
+  .import-upload {
+    padding: 1.25rem;
+  }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Importar contatos</h2>
+        <a href="{% url 'contacts:contact_list' %}" class="btn-secondary">Voltar à lista</a>
+    </div>
+    <div class="section-body">
+        {% include "contacts/import_wizard_steps.html" with wizard_step=1 wizard_has_dup=False %}
+
+        <p class="import-format-hint"><strong>Passo 1 de 5</strong> — Envie um arquivo Excel (.xlsx) ou CSV (.csv). A primeira linha deve conter os títulos das colunas (ex.: Codigo, nome, Celular, whatsapp, data de nascimento, etc.).</p>
+
+        <div class="import-layout">
+            <div class="import-upload">
+                <p class="import-upload__title">
+                    <span aria-hidden="true">📤</span>
+                    Enviar planilha
+                </p>
+                <p class="import-upload__sub">Envie o arquivo com os contatos para iniciar o mapeamento e a importação.</p>
+
+                <div class="import-modelo">
+                    <button type="button" class="btn-modelo" onclick="window.location.href='{% url 'contacts:contacts_import_template' %}'">Baixar modelo Excel</button>
+                    <span class="import-modelo__note">.xlsx com exemplos e regras de preenchimento.</span>
+                </div>
+
+                <form method="post" enctype="multipart/form-data" class="form-perfil" id="import-form">
+                    {% csrf_token %}
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-warning">{{ form.non_field_errors }}</div>
+                    {% endif %}
+                    <div class="form-group">
+                        <label for="id_file">{{ form.file.label }}</label>
+
+                        <div class="file-drop" id="file-drop" tabindex="0" role="button" aria-label="Arraste e solte ou escolha um arquivo Excel">
+                            <div class="file-drop-icon" aria-hidden="true">📎</div>
+                            <div class="file-drop-title">Arraste e solte aqui</div>
+                            <div class="file-drop-subtitle">ou</div>
+                            <button type="button" class="btn-secondary" id="file-choose">Escolher arquivo</button>
+                            <div class="file-drop-filename" id="file-name">Nenhum arquivo selecionado</div>
+                            <div class="file-drop-hint">.xlsx recomendado ou .csv</div>
+                        </div>
+
+                        <div class="file-input-hidden">
+                            {{ form.file }}
+                        </div>
+
+                        {% if form.file.help_text %}<span class="helptext">{{ form.file.help_text }}</span>{% endif %}
+                        {{ form.file.errors }}
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Enviar e mapear colunas</button>
+                    </div>
+                </form>
+            </div>
+
+        </div>
+
+        <script>
+          (function () {
+            var drop = document.getElementById('file-drop');
+            var choose = document.getElementById('file-choose');
+            var fileInput = document.getElementById('id_file');
+            var fileName = document.getElementById('file-name');
+            if (!drop || !choose || !fileInput || !fileName) return;
+
+            fileInput.classList.add('file-input-native');
+
+            function setName() {
+              var f = fileInput.files && fileInput.files[0];
+              fileName.textContent = f ? f.name : 'Nenhum arquivo selecionado';
+            }
+
+            choose.addEventListener('click', function () {
+              fileInput.click();
+            });
+
+            drop.addEventListener('click', function () {
+              fileInput.click();
+            });
+
+            drop.addEventListener('keydown', function (e) {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                fileInput.click();
+              }
+            });
+
+            fileInput.addEventListener('change', setName);
+
+            function prevent(e) { e.preventDefault(); e.stopPropagation(); }
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function (evt) {
+              drop.addEventListener(evt, prevent, false);
+            });
+
+            drop.addEventListener('dragenter', function () { drop.classList.add('is-dragover'); });
+            drop.addEventListener('dragover', function () { drop.classList.add('is-dragover'); });
+            drop.addEventListener('dragleave', function () { drop.classList.remove('is-dragover'); });
+            drop.addEventListener('drop', function (e) {
+              drop.classList.remove('is-dragover');
+              var dt = e.dataTransfer;
+              if (!dt || !dt.files || !dt.files.length) return;
+              fileInput.files = dt.files;
+              setName();
+            });
+          })();
+        </script>
+    </div>
+</section>
+{% endblock %}

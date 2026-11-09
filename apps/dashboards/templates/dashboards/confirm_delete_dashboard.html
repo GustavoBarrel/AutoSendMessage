@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Excluir painel{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Excluir painel</h2>
+    </div>
+    <div class="section-body">
+        <p>Tem certeza que deseja excluir o painel <strong>{{ dashboard.name }}</strong>?</p>
+        <p style="font-size:.88rem;color:#666;">
+            Todos os {{ dashboard.widgets.count }} gráfico{{ dashboard.widgets.count|pluralize:"s" }} serão removidos. Esta ação é irreversível.
+        </p>
+        <div style="display:flex;gap:1rem;margin-top:1.5rem;">
+            <form method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn-primary" style="background:#c62828;border-color:#c62828;">Sim, excluir</button>
+            </form>
+            <a href="{% url 'dashboards:custom_dashboard_view' dashboard.pk %}" class="btn-secondary">Cancelar</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

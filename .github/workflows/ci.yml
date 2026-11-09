@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    env:
+      # Valor descartável, só para o CI (DEBUG é False por padrão e exige uma SECRET_KEY).
+      SECRET_KEY: ci-only-throwaway-key-9f3k2m8x1q7w5e4r6t0y-not-a-secret-value
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Lint (ruff check)
+        run: ruff check .
+
+      - name: Formatting (ruff format)
+        run: ruff format --check .
+
+      - name: Django system check
+        run: python manage.py check
+
+      - name: Pending migrations
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Deploy checks (HTTPS hardening)
+        run: python manage.py check --deploy --fail-level WARNING
+        env:
+          ALLOWED_HOSTS: app.example.com
+
+      - name: Tests
+        run: python manage.py test

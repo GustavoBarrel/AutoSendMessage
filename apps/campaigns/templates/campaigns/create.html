@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Nova campanha - AutoSendMessage{% endblock %}
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Nova campanha</h2>
+    </div>
+    <div class="section-body">
+        <p class="form-info"><strong>Rascunho:</strong> a campanha será criada em <strong>rascunho</strong>. Nada é enviado até você concluir o assistente (público, chips, mensagens) e iniciar o envio no painel.</p>
+        <form method="post" class="form-perfil">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="id_name">Nome da campanha</label>
+                <input type="text" name="name" id="id_name" maxlength="120" required class="form-control" value="{{ name|default:'' }}" placeholder="Ex.: Promoção de fim de mês">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Criar e abrir assistente</button>
+                <a href="{% url 'campaigns:campaign_list' %}" class="btn-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %}

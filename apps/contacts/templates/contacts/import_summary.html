@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}Resumo da importação - Contatos{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Resumo da importação</h2>
+        <a href="{% url 'contacts:contact_list' %}" class="btn-secondary">Cancelar</a>
+    </div>
+    <div class="section-body">
+        {% include "contacts/import_wizard_steps.html" with wizard_step=5 wizard_has_dup=False wizard_dup_skipped=wizard_dup_skipped %}
+        <p class="resumo-intro">Revise os números abaixo e decida o que fazer com os contatos que já existem no sistema com dados diferentes. Depois, clique em <strong>Executar importação</strong>.</p>
+
+        <div class="preview-cards resumo-cards">
+            <div class="preview-card preview-card--success">
+                <span class="preview-card-label">Serão importados (novos)</span>
+                <span class="preview-card-value">{{ to_import|length }}</span>
+                <span class="preview-card-hint">entram na base pela 1ª vez</span>
+            </div>
+            <div class="preview-card">
+                <span class="preview-card-label">Já existentes (iguais)</span>
+                <span class="preview-card-value">{{ ignored_count }}</span>
+                <span class="preview-card-hint">não serão alterados</span>
+            </div>
+            <div class="preview-card preview-card--error">
+                <span class="preview-card-label">Não importados</span>
+                <span class="preview-card-value">{{ not_imported|length }}</span>
+                <span class="preview-card-hint">erro ou validação</span>
+            </div>
+            <div class="preview-card preview-card--dup">
+                <span class="preview-card-label">Divergência (decisão)</span>
+                <span class="preview-card-value">{{ conflicts|length }}</span>
+                <span class="preview-card-hint">já existe com dados diferentes</span>
+            </div>
+        </div>
+
+        <div class="resumo-acoes card-block">
+            <h3 class="resumo-acoes-title">O que acontece ao clicar em &quot;Executar importação&quot;</h3>
+            <ul class="resumo-acoes-list">
+                <li><strong>{{ to_import|length }} contatos novos</strong> serão criados na base.</li>
+                <li><strong>{{ ignored_count }} contatos</strong> já existem com os mesmos dados e serão ignorados.</li>
+                {% if conflicts %}
+                <li>Para <strong>{{ conflicts|length }} celular(es)</strong> que já existe(m) com dados diferentes, será aplicada a opção que você escolher abaixo (manter atual ou atualizar com o Excel).</li>
+                {% endif %}
+                {% if not_imported %}
+                <li><strong>{{ not_imported|length }} linha(s)</strong> não serão importadas (erro/validação); confira a lista abaixo se quiser.</li>
+                {% endif %}
+            </ul>
+        </div>
+
+        {% if not_imported %}
+        <div class="resumo-block card-block resumo-block--error">
+            <h3 class="resumo-block-title">Não importados ({{ not_imported|length }})</h3>
+            <p class="resumo-block-hint">Estas linhas ficam de fora por erro ou validação.</p>
+            <div class="table-scroll">
+            <table class="table-perfis">
+                <thead>
+                    <tr>
+                        <th>Linha</th>
+                        <th>Celular</th>
+                        <th>Motivo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in not_imported %}
+                    <tr>
+                        <td>{{ item.row|default:"—" }}</td>
+                        <td>{{ item.mobile_phone|default:"—" }}</td>
+                        <td>{{ item.reason }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if to_import %}
+        <div class="resumo-block card-block resumo-block--success">
+            <h3 class="resumo-block-title">Serão importados — novos ({{ to_import|length }})</h3>
+            <p class="resumo-block-hint">Estes contatos serão criados na base. Mostrando os primeiros {{ to_import_preview|length }} para conferência.</p>
+            <div class="table-scroll">
+            <table class="table-perfis">
+                <thead>
+                    <tr>
+                        <th>Celular</th>
+                        <th>Nome</th>
+                        <th>WhatsApp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in to_import_preview %}
+                    <tr>
+                        <td><code>{{ row.mobile_phone }}</code></td>
+                        <td>{{ row.name|default:"—" }}</td>
+                        <td>{% if row.has_whatsapp %}Sim{% else %}Não{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% if to_import_rest_count %}
+            <p class="resumo-block-more">… e mais {{ to_import_rest_count }} contato(s) (todos serão importados).</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'contacts:contacts_import_run' %}" class="form-perfil" id="form-importar-resumo">
+            {% csrf_token %}
+            <div class="resumo-block card-block" style="margin-top:1rem;">
+                <h3 class="resumo-block-title">Tags para os contatos importados</h3>
+                <p class="resumo-block-hint">
+                    As tags selecionadas abaixo serão adicionadas a <strong>todos os contatos desta importação</strong>
+                    (novos e atualizados). Você poderá ajustar depois por contato.
+                </p>
+                <div class="form-group">
+                    <label>Selecione 1 ou mais tags (opcional)</label>
+                    <div class="tag-picker">
+                        <div class="tag-picker__hint">
+                            Clique para adicionar/remover. As alterações só são aplicadas ao clicar em <strong>Executar importação</strong>.
+                        </div>
+                        <div class="tag-pill-grid" id="bulk-tag-pill-grid">
+                            {% for t in tags_all %}
+                                <button
+                                    type="button"
+                                    class="tag-pill {% if t.pk in bulk_tag_ids %}tag-pill--active{% endif %}"
+                                    data-tag-id="{{ t.pk }}"
+                                    aria-pressed="{% if t.pk in bulk_tag_ids %}true{% else %}false{% endif %}"
+                                >
+                                    {{ t.name }}
+                                </button>
+                            {% endfor %}
+                        </div>
+                        <div id="bulk-tag-hidden-inputs">
+                            {% for t in tags_all %}
+                                {% if t.pk in bulk_tag_ids %}
+                                    <input type="hidden" name="bulk_tag_ids" value="{{ t.pk }}" data-tag-id="{{ t.pk }}">
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <p class="form-info" style="margin-top:.35rem;">
+                        Para criar/editar tags, use a tela <strong>Contatos → Tags</strong>.
+                    </p>
+                </div>
+            </div>
+            {% if conflicts_with_fields %}
+            <div class="resumo-block card-block resumo-block--dup">
+                <h3 class="resumo-block-title">Já existe no sistema com divergência — escolha a ação</h3>
+                <p class="resumo-block-hint">Para cada celular abaixo, escolha se mantém os dados atuais ou atualiza com os dados do Excel.</p>
+                {% for excel_data, current_data, diff, field in conflicts_with_fields %}
+                <div class="conflito-block">
+                    <h4 class="conflito-celular">Celular: <code>{{ excel_data.mobile_phone }}</code></h4>
+                    <table class="table-perfis conflito-diff">
+                        <thead>
+                            <tr>
+                                <th>Campo</th>
+                                <th>Valor atual (sistema)</th>
+                                <th>Valor no Excel</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in diff %}
+                            <tr>
+                                <td>{{ d.0 }}</td>
+                                <td>{{ d.1|default:"—" }}</td>
+                                <td>{{ d.2|default:"—" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <div class="form-group conflito-decisao">
+                        {{ field.label_tag }}
+                        {{ field }}
+                        {{ field.errors }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="form-actions resumo-form-actions">
+                <button type="submit" class="btn-primary" id="btn-executar-importacao">Executar importação</button>
+            </div>
+        </form>
+        <script>
+        (function () {
+            var form = document.getElementById('form-importar-resumo');
+            var btn = document.getElementById('btn-executar-importacao');
+            if (!form || !btn) return;
+            form.addEventListener('submit', function () {
+                if (btn.dataset.importando === '1') return;
+                btn.dataset.importando = '1';
+                btn.disabled = true;
+                btn.textContent = 'Importando…';
+                btn.classList.add('btn-primary--loading');
+            });
+        })();
+        </script>
+
+        <style>
+        .tag-picker{
+            border: 1.5px solid #e3f2fd;
+            background: #f8fbff;
+            border-radius: 12px;
+            padding: .75rem .85rem;
+        }
+        .tag-picker__hint{
+            font-size: .82rem;
+            color: #616161;
+            margin-bottom: .55rem;
+        }
+        .tag-pill-grid{
+            display:flex;
+            flex-wrap:wrap;
+            gap:.5rem;
+            margin-top:.2rem;
+        }
+        .tag-pill{
+            border: 1.5px solid #e0e0e0;
+            border-radius: 999px;
+            background: #fff;
+            padding: .35rem .75rem;
+            font-size: .86rem;
+            font-weight: 800;
+            color: #424242;
+            cursor: pointer;
+            transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+            user-select:none;
+            white-space:nowrap;
+        }
+        .tag-pill:hover{
+            border-color: #90caf9;
+            background: #f3f7ff;
+        }
+        .tag-pill:focus{
+            outline:none;
+            box-shadow: 0 0 0 3px rgba(21,101,192,.12);
+        }
+        .tag-pill--active{
+            border-color: #1565c0;
+            background: #e3f2fd;
+            color: #0d47a1;
+            box-shadow: 0 0 0 3px rgba(21,101,192,.10);
+        }
+        </style>
+
+        <script>
+        (function () {
+            var grid = document.getElementById('bulk-tag-pill-grid');
+            var hiddenWrap = document.getElementById('bulk-tag-hidden-inputs');
+            if (!grid || !hiddenWrap) return;
+
+            function hasHidden(tagId) {
+                return !!hiddenWrap.querySelector('input[type="hidden"][data-tag-id="' + tagId + '"]');
+            }
+
+            function addHidden(tagId) {
+                if (hasHidden(tagId)) return;
+                var inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.name = 'bulk_tag_ids';
+                inp.value = String(tagId);
+                inp.setAttribute('data-tag-id', String(tagId));
+                hiddenWrap.appendChild(inp);
+            }
+
+            function removeHidden(tagId) {
+                var el = hiddenWrap.querySelector('input[type="hidden"][data-tag-id="' + tagId + '"]');
+                if (el) el.remove();
+            }
+
+            grid.addEventListener('click', function (e) {
+                var btn = e.target;
+                while (btn && btn !== grid && !(btn.tagName === 'BUTTON' && btn.classList.contains('tag-pill'))) {
+                    btn = btn.parentElement;
+                }
+                if (!btn || btn === grid) return;
+                var tagId = btn.getAttribute('data-tag-id');
+                if (!tagId) return;
+                var active = btn.classList.toggle('tag-pill--active');
+                btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+                if (active) addHidden(tagId);
+                else removeHidden(tagId);
+            });
+        })();
+        </script>
+    </div>
+</section>
+{% endblock %}

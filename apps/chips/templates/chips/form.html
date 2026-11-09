@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} - AutoSendMessage{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">{{ title }}</h2>
+    </div>
+    <div class="section-body">
+        <p class="form-info">Provedor e limites. Respeite os horários e limites recomendados para evitar bloqueio do chip.</p>
+
+        {% if blocking_campaigns %}
+        <div class="alert alert-warning" style="border-left:4px solid #e65100;background:#fff3e0;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;">
+            <strong>🔒 Edição bloqueada</strong>
+            <p style="margin:.5rem 0 .4rem;font-size:.92rem;">
+                Este chip está sendo utilizado em campanha(s) <strong>ativa(s)</strong>. Para editar as configurações,
+                pause ou finalize todas as campanhas que utilizam este chip:
+            </p>
+            <ul style="margin:.25rem 0 0 1.2rem;font-size:.9rem;">
+                {% for c in blocking_campaigns %}
+                <li>
+                    <a href="{% url 'campaigns:campaign_detail' c.pk %}" style="color:#e65100;font-weight:600;">{{ c.name }}</a>
+                    — <span style="color:#bf360c;">{{ c.get_status_display }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <fieldset disabled style="border:none;padding:0;margin:0;opacity:.55;" title="Edição bloqueada por campanha ativa">
+        {% endif %}
+
+        {% if form.limits_warning %}
+        <div class="alert alert-warning recommendation-alert">
+            <strong>⚠️ Atenção</strong>
+            <ul class="recommendation-alert-list">
+                {% for msg in form.limits_warning %}
+                <li>{{ msg }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        <div class="alert alert-warning recommendation-alert" id="aviso-limites-js" style="display: none;"></div>
+
+        {{ recommended_limits|json_script:"recommendedLimits" }}
+        <form method="post" class="form-perfil form-chip-custom" id="form-chip">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="alert alert-warning">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <div class="chip-form-block">
+                <h3 class="chip-form-block-title">Identificação e provedor</h3>
+                <div class="form-group">
+                    <label for="id_name">{{ form.name.label }}</label>
+                    {{ form.name }}
+                    {{ form.name.errors }}
+                </div>
+                <div class="form-group">
+                    <label>{{ form.provider.label }}</label>
+                    <div class="provider-radio-group">
+                        {% for radio in form.provider %}
+                        <label class="provider-radio-label">
+                            {{ radio.tag }}
+                            <span class="provider-radio-text">
+                                <strong>{{ radio.choice_label }}</strong>
+                            </span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {{ form.provider.errors }}
+                    {% if form.provider.help_text %}<span class="helptext">{{ form.provider.help_text }}</span>{% endif %}
+                </div>
+                <div class="form-group" id="instance-name-group">
+                    <label for="id_instance_name">{{ form.instance_name.label }}</label>
+                    {{ form.instance_name }}
+                    {% if form.instance_name.help_text %}<span class="helptext">{{ form.instance_name.help_text }}</span>{% endif %}
+                    {{ form.instance_name.errors }}
+                </div>
+                <div id="meta-fields-group" style="display:none;">
+                    <div class="form-row form-row-2">
+                        <div class="form-group">
+                            <label for="id_meta_phone_number_id">{{ form.meta_phone_number_id.label }}</label>
+                            {{ form.meta_phone_number_id }}
+                            {% if form.meta_phone_number_id.help_text %}<span class="helptext">{{ form.meta_phone_number_id.help_text }}</span>{% endif %}
+                            {{ form.meta_phone_number_id.errors }}
+                        </div>
+                        <div class="form-group">
+                            <label for="id_meta_waba_id">{{ form.meta_waba_id.label }}</label>
+                            {{ form.meta_waba_id }}
+                            {% if form.meta_waba_id.help_text %}<span class="helptext">{{ form.meta_waba_id.help_text }}</span>{% endif %}
+                            {{ form.meta_waba_id.errors }}
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="id_meta_access_token">{{ form.meta_access_token.label }}</label>
+                        {{ form.meta_access_token }}
+                        {% if form.meta_access_token.help_text %}<span class="helptext">{{ form.meta_access_token.help_text }}</span>{% endif %}
+                        {{ form.meta_access_token.errors }}
+                    </div>
+                    <div class="form-group">
+                        <label for="id_meta_api_version">{{ form.meta_api_version.label }}</label>
+                        {{ form.meta_api_version }}
+                        {% if form.meta_api_version.help_text %}<span class="helptext">{{ form.meta_api_version.help_text }}</span>{% endif %}
+                        {{ form.meta_api_version.errors }}
+                    </div>
+                </div>
+                {% if chip %}
+                <input type="hidden" id="chip-initial-provider" value="{{ chip.provider|default:'evolution' }}">
+                <input type="hidden" id="chip-initial-instance" value="{{ chip.instance_name|default:'' }}">
+                {% endif %}
+            </div>
+
+            <div class="chip-form-block">
+                <h3 class="chip-form-block-title">Tipo de conta e limites</h3>
+                <div class="recommendation-box">
+                    <span class="recommendation-icon">💡</span>
+                    <p><strong>Recomendação:</strong> Valores acima do indicado aumentam o risco de bloqueio pelo WhatsApp.</p>
+                </div>
+                <div class="form-row form-row-2">
+                    <div class="form-group">
+                        <label for="id_account_type">{{ form.account_type.label }}</label>
+                        {{ form.account_type }}
+                        {% if form.account_type.help_text %}<span class="helptext">{{ form.account_type.help_text }}</span>{% endif %}
+                        {{ form.account_type.errors }}
+                    </div>
+                    <div class="form-group">
+                        <label for="id_max_messages_per_hour">{{ form.max_messages_per_hour.label }}</label>
+                        {{ form.max_messages_per_hour }}
+                        {{ form.max_messages_per_hour.errors }}
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="id_max_messages_per_day">{{ form.max_messages_per_day.label }}</label>
+                    {{ form.max_messages_per_day }}
+                    {% if form.max_messages_per_day.help_text %}<span class="helptext">{{ form.max_messages_per_day.help_text }}</span>{% endif %}
+                    {{ form.max_messages_per_day.errors }}
+                </div>
+            </div>
+
+            <div class="chip-form-block chip-form-block-time">
+                <h3 class="chip-form-block-title">Horário de envio</h3>
+                <div class="form-row form-row-time">
+                    <div class="form-group form-group-time">
+                        <label for="id_send_window_start">{{ form.send_window_start.label }}</label>
+                        {{ form.send_window_start }}
+                        {{ form.send_window_start.errors }}
+                    </div>
+                    <span class="time-sep">até</span>
+                    <div class="form-group form-group-time">
+                        <label for="id_send_window_end">{{ form.send_window_end.label }}</label>
+                        {{ form.send_window_end }}
+                        {{ form.send_window_end.errors }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="chip-form-block">
+                <h3 class="chip-form-block-title">Intervalo entre mensagens</h3>
+                <div class="form-group">
+                    <label for="id_delay_between_messages_seconds">{{ form.delay_between_messages_seconds.label }}</label>
+                    {{ form.delay_between_messages_seconds }}
+                    {{ form.delay_between_messages_seconds.errors }}
+                </div>
+                <p class="recommendation-inline" id="delay-sugerido">
+                    <strong>Delay sugerido:</strong> <span id="delay-valor">—</span> segundos (mínimo 30).
+                </p>
+            </div>
+
+            {% if form.is_active %}
+            <div class="chip-form-block">
+                <div class="form-group form-group-checkbox">
+                    {{ form.is_active }}
+                    <label for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
+                    {{ form.is_active.errors }}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="form-actions">
+                {% if not blocking_campaigns %}
+                <button type="submit" class="btn-primary">Salvar</button>
+                {% endif %}
+                <a href="{% url 'dashboards:home' %}" class="btn-secondary">{% if blocking_campaigns %}Voltar{% else %}Cancelar{% endif %}</a>
+            </div>
+        </form>
+
+        {% if blocking_campaigns %}
+        </fieldset>
+        {% endif %}
+
+        {% if chip %}
+        <div class="chip-form-block" style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #e0e0e0;">
+            <h3 class="chip-form-block-title">Fila de campanhas</h3>
+            <p class="form-info" style="margin-bottom:.5rem;">
+                Envios neste chip adiados para depois (limite/hora, intervalo ou retentativa): <strong>{{ chip_deferred_pending }}</strong>
+            </p>
+            <form method="post" action="{% url 'chips:chip_clear_pending_schedule' chip.pk %}"
+                  onsubmit="return confirm('Remover adiamentos futuros deste chip? Os envios voltam a ser elegíveis já; o worker aplica os limites atuais do chip.');">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" class="btn-secondary">Limpar adiamentos deste chip</button>
+            </form>
+            <p class="helptext" style="margin-top:.5rem;">
+                Use depois de aumentar mensagens/hora ou ajustar o chip: evita esperar o horário antigo calculado com os limites anteriores.
+            </p>
+        </div>
+        {% endif %}
+
+        <script>
+        (function() {
+            var providerRadios = document.querySelectorAll('input[name="provider"]');
+            var instanceGroup = document.getElementById('instance-name-group');
+            var metaGroup = document.getElementById('meta-fields-group');
+            var initialProvider = document.getElementById('chip-initial-provider');
+            function syncProviderVisibility() {
+                var selected = document.querySelector('input[name="provider"]:checked');
+                var provider = selected ? selected.value : 'evolution';
+                if (!provider && initialProvider) provider = initialProvider.value || 'evolution';
+                var isMeta = provider === 'meta';
+                if (instanceGroup) instanceGroup.style.display = isMeta ? 'none' : '';
+                if (metaGroup) metaGroup.style.display = isMeta ? '' : 'none';
+                // toggle required on client side
+                if (instanceGroup) {
+                    var inp = document.getElementById('id_instance_name');
+                    if (inp) inp.required = !isMeta;
+                }
+                if (metaGroup) {
+                    var pn = document.getElementById('id_meta_phone_number_id');
+                    var tk = document.getElementById('id_meta_access_token');
+                    if (pn) pn.required = isMeta;
+                    if (tk) tk.required = isMeta && !tk.dataset.hasStored;
+                }
+            }
+            providerRadios.forEach(function(r) { r.addEventListener('change', syncProviderVisibility); });
+            syncProviderVisibility();
+        })();
+        </script>
+
+        <script>
+        (function() {
+            var el = document.getElementById('recommendedLimits');
+            var limits = el ? JSON.parse(el.textContent) : { new: { per_hour: 5, per_day: 25 }, normal: { per_hour: 10, per_day: 75 }, old: { per_hour: 20, per_day: 150 } };
+            var accountTypeSelect = document.getElementById('id_account_type');
+            var inpHour = document.getElementById('id_max_messages_per_hour');
+            var inpDay = document.getElementById('id_max_messages_per_day');
+            var inpDelay = document.getElementById('id_delay_between_messages_seconds');
+            var spanDelay = document.getElementById('delay-valor');
+            function updateSuggestedDelay() {
+                if (!inpHour || !spanDelay) return;
+                var v = parseInt(inpHour.value, 10);
+                if (v > 0) {
+                    var seg = Math.max(30, Math.floor(3600 / v));
+                    spanDelay.textContent = seg + ' (para ' + v + ' msg/hora)';
+                    if (inpDelay) {
+                        inpDelay.placeholder = 'Sugestão: ' + seg;
+                        if (!inpDelay.dataset.userEdited && !inpDelay.value) inpDelay.value = seg;
+                    }
+                } else spanDelay.textContent = '—';
+            }
+            if (inpDelay) {
+                inpDelay.addEventListener('input', function () { inpDelay.dataset.userEdited = '1'; });
+                inpDelay.addEventListener('change', function () { inpDelay.dataset.userEdited = '1'; });
+            }
+            if (accountTypeSelect) accountTypeSelect.addEventListener('change', function() {
+                var accountType = accountTypeSelect.value;
+                if (limits[accountType]) {
+                    if (inpHour) inpHour.value = limits[accountType].per_hour;
+                    if (inpDay) inpDay.value = limits[accountType].per_day;
+                }
+                updateSuggestedDelay();
+            });
+            if (inpHour) { inpHour.addEventListener('input', updateSuggestedDelay); inpHour.addEventListener('change', updateSuggestedDelay); }
+            updateSuggestedDelay();
+
+            var warningDiv = document.getElementById('aviso-limites-js');
+            function updateWarning() {
+                if (!warningDiv || !accountTypeSelect) return;
+                var accountType = accountTypeSelect.value;
+                var rec = limits[accountType];
+                if (!rec) { warningDiv.style.display = 'none'; return; }
+                var h = parseInt(inpHour && inpHour.value, 10);
+                var d = parseInt(inpDay && inpDay.value, 10);
+                var msgs = [];
+                if (h > rec.per_hour) msgs.push('Mensagens por hora (' + h + ') acima do recomendado (' + rec.per_hour + '). Risco de bloqueio.');
+                if (d > rec.per_day) msgs.push('Mensagens por dia (' + d + ') acima do recomendado (' + rec.per_day + '). Risco de bloqueio.');
+                if (msgs.length) {
+                    warningDiv.innerHTML = '<strong>⚠️ Atenção</strong><ul class="recommendation-alert-list"><li>' + msgs.join('</li><li>') + '</li></ul>';
+                    warningDiv.style.display = 'block';
+                } else warningDiv.style.display = 'none';
+            }
+            if (accountTypeSelect) accountTypeSelect.addEventListener('change', updateWarning);
+            if (inpHour) inpHour.addEventListener('input', updateWarning);
+            if (inpDay) inpDay.addEventListener('input', updateWarning);
+            updateWarning();
+        })();
+        </script>
+    </div>
+</section>
+{% endblock %}

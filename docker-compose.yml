@@ -1,0 +1,174 @@
+# AutoSendMessage — ambiente de demonstração com Docker Compose.
+#
+#   cp .env.example .env     (preencha as senhas e a SECRET_KEY)
+#   docker compose up -d --build     (SEED_DEMO=1 no .env cria dados fictícios de demonstração)
+#   -> http://localhost:8000 (provedor de WhatsApp SIMULADO: nada é enviado de verdade)
+#
+# Evolution API real (opcional, imagem grande):
+#   docker compose --profile evolution up -d
+#   -> http://localhost:${EVOLUTION_HOST_PORT:-18080}
+#   e preencha EVOLUTION_URL_BASE / EVOLUTION_API_KEY no .env.
+#
+# Nenhum serviço usa container_name fixo, para não colidir com outros projetos.
+
+x-app-image: &app-image
+  build: .
+  image: autosendmessage-app:local
+
+x-app-environment: &app-environment
+  DEBUG: "False"
+  SECRET_KEY: ${SECRET_KEY:?defina SECRET_KEY no .env}
+  # A demonstração roda em HTTP puro (localhost:8000). Atrás de HTTPS, use USE_HTTPS=True e
+  # TRUST_X_FORWARDED_PROTO=True (proxy que define X-Forwarded-Proto), ALLOWED_HOSTS e
+  # CSRF_TRUSTED_ORIGINS (ex.: https://app.exemplo.com).
+  USE_HTTPS: ${USE_HTTPS:-False}
+  TRUST_X_FORWARDED_PROTO: ${TRUST_X_FORWARDED_PROTO:-False}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}
+  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+  FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:-}
+  DB_ENGINE: postgres
+  DB_NAME: ${DB_NAME:-autosendmessage}
+  DB_USER: ${DB_USER:-autosendmessage}
+  DB_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env}
+  DB_HOST: db
+  DB_PORT: "5432"
+  # A Evolution é opcional: sem ela só o provedor simulado funciona.
+  EVOLUTION_URL_BASE: ${EVOLUTION_URL_BASE:-}
+  EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
+  SIMULATED_PROVIDER_ENABLED: "True"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-autosendmessage}
+      POSTGRES_USER: ${DB_USER:-autosendmessage}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env}
+    volumes:
+      - app-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    <<: *app-image
+    restart: unless-stopped
+    # SEED_DEMO=1 (adesão explícita) popula o banco com dados fictícios depois do migrate.
+    # --force é necessário porque aqui DEBUG é False; o comando é idempotente.
+    command: >
+      sh -c 'python manage.py migrate --noinput &&
+             if [ "$${SEED_DEMO:-0}" = "1" ]; then python manage.py seed_demo --force; fi &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2'
+    environment:
+      <<: *app-environment
+      SEED_DEMO: ${SEED_DEMO:-0}
+    ports:
+      - "8000:8000"
+    volumes:
+      - app-media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        # X-Forwarded-Proto evita o redirecionamento para HTTPS quando USE_HTTPS=True.
+        - "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/', headers={'X-Forwarded-Proto': 'https'}), timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  worker:
+    <<: *app-image
+    restart: unless-stopped
+    command: python manage.py run_campaign_send_worker
+    environment: *app-environment
+    volumes:
+      - app-media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        # O web aplica as migrations antes de ficar saudável.
+        condition: service_healthy
+
+  # ---- Evolution API (opcional): docker compose --profile evolution up -d ----
+
+  evolution-postgres:
+    profiles: [evolution]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      # Obrigatória com o profile (o Postgres recusa subir sem senha). Fora dele, fica vazia.
+      POSTGRES_PASSWORD: ${EVOLUTION_DB_PASSWORD:-}
+      POSTGRES_DB: evolution
+    volumes:
+      - evolution-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  evolution-redis:
+    profiles: [evolution]
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - evolution-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  evolution-api:
+    profiles: [evolution]
+    image: atendai/evolution-api:latest
+    restart: unless-stopped
+    ports:
+      # Só no loopback: a Evolution não deve ficar exposta na rede.
+      - "127.0.0.1:${EVOLUTION_HOST_PORT:-18080}:8080"
+    environment:
+      # Server
+      SERVER_TYPE: http
+      SERVER_PORT: "8080"
+      SERVER_URL: http://localhost:${EVOLUTION_HOST_PORT:-18080}
+
+      # Autenticação
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-}
+
+      # PostgreSQL
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_DB_PASSWORD}@evolution-postgres:5432/evolution?schema=public
+
+      # Redis
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://evolution-redis:6379/0
+      CACHE_REDIS_PREFIX_KEY: evolution
+
+      # QR Code (otimizado para uso local)
+      QRCODE_LIMIT: "30"
+      QRCODE_COLOR: "#198754"
+
+      # Logs reduzidos
+      LOG_LEVEL: ERROR,WARN
+    depends_on:
+      evolution-postgres:
+        condition: service_healthy
+      evolution-redis:
+        condition: service_healthy
+
+volumes:
+  app-db-data:
+  app-media:
+  evolution-postgres-data:
+  evolution-redis-data:

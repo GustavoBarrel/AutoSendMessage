@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Meus Painéis - AutoSendMessage{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <div>
+            <h2 class="section-title">Meus Painéis</h2>
+            {% if current_workspace %}<span class="section-badge">{{ current_workspace.name }}</span>{% endif %}
+        </div>
+        <div style="display:flex;gap:.6rem;align-items:center;">
+            <a href="{% url 'dashboards:stats_dashboard' %}" class="btn-secondary">← Estatísticas gerais</a>
+            <a href="{% url 'dashboards:custom_dashboard_create' %}" class="btn-primary">+ Novo painel</a>
+        </div>
+    </div>
+    <div class="section-body">
+        {% if dashboards %}
+        <div class="panel-grid">
+            {% for dash in dashboards %}
+            <div class="panel-card">
+                <div class="panel-card__header">
+                    <strong>{{ dash.name }}</strong>
+                    {% if dash.is_default %}<span class="panel-badge-default">Padrão</span>{% endif %}
+                </div>
+                <div class="panel-card__meta">
+                    {{ dash.widgets.count }} gráfico{{ dash.widgets.count|pluralize:"s" }}
+                    · Atualizado em {{ dash.updated_at|date:"d/m/Y H:i" }}
+                </div>
+                <div class="panel-card__actions">
+                    <a href="{% url 'dashboards:custom_dashboard_view' dash.pk %}" class="btn-primary btn-sm">Abrir</a>
+                    <a href="{% url 'dashboards:custom_dashboard_edit' dash.pk %}" class="btn-secondary btn-sm">Editar</a>
+                    <a href="{% url 'dashboards:custom_dashboard_delete' dash.pk %}" class="btn-link btn-link-danger btn-sm">Excluir</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="icon">📊</div>
+            <p>Nenhum painel personalizado ainda.</p>
+            <p style="font-size:.88rem;color:#666;">Crie um painel e adicione gráficos personalizados com os dados que você precisa.</p>
+            <a href="{% url 'dashboards:custom_dashboard_create' %}" class="btn-primary" style="margin-top:.8rem;">Criar meu primeiro painel</a>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<style>
+    .panel-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1rem;
+    }
+    .panel-card {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 12px;
+        padding: 1.2rem 1.4rem;
+        display: flex;
+        flex-direction: column;
+        gap: .6rem;
+    }
+    .panel-card__header {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        font-size: 1.05rem;
+    }
+    .panel-badge-default {
+        background: var(--color-primary);
+        color: #fff;
+        font-size: .7rem;
+        padding: .15rem .5rem;
+        border-radius: 20px;
+        font-weight: 600;
+    }
+    .panel-card__meta {
+        font-size: .84rem;
+        color: #757575;
+    }
+    .panel-card__actions {
+        display: flex;
+        gap: .5rem;
+        margin-top: .4rem;
+    }
+    .btn-sm {
+        padding: .35rem .7rem;
+        font-size: .82rem;
+    }
+</style>
+{% endblock %}

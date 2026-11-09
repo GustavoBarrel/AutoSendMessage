@@ -1,0 +1,11 @@
+/*
+ * Shared design tokens. The interface's primary color is defined only here:
+ * to change the visual identity, change these variables.
+ * Contrast of white text on --color-primary: 5.02:1 (WCAG AA).
+ */
+:root {
+  --color-primary: #15803d;
+  --color-primary-rgb: 21, 128, 61;
+  --color-primary-hover: #166534;
+  --color-primary-soft: #dcfce7;
+}

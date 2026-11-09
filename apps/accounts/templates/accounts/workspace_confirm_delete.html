@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Excluir perfil - AutoSendMessage{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Excluir perfil</h2>
+        <a href="{% url 'accounts:workspace_list' %}" class="btn-secondary">Voltar</a>
+    </div>
+    <div class="section-body">
+        <div class="alert alert-warning">
+            Tem certeza que deseja excluir o perfil <strong>{{ workspace.name }}</strong>?
+        </div>
+        <form action="{% url 'accounts:workspace_delete' workspace.pk %}" method="post" class="form-actions form-actions-delete">
+            {% csrf_token %}
+            <button type="submit" class="btn-primary">Confirmar exclusão</button>
+            <a href="{% url 'accounts:workspace_list' %}" class="btn-secondary">Cancelar</a>
+        </form>
+    </div>
+</section>
+{% endblock %}
+

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Editar campanha - AutoSendMessage{% endblock %}
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">{{ campaign.name }}</h2>
+        <a href="{% url 'campaigns:campaign_detail' campaign.pk %}" class="btn-secondary">Painel</a>
+    </div>
+    <div class="section-body">
+        <p class="form-info">Público selecionado: <strong>{{ campaign.get_audience_display }}</strong>. Preview de contatos: <strong>{{ preview_count }}</strong>.</p>
+        <form method="post" class="form-perfil">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="id_name">Nome</label>
+                <input type="text" name="name" id="id_name" maxlength="120" required class="form-control" value="{{ campaign.name }}">
+            </div>
+            <div class="form-group">
+                <label for="id_audience">Público (ao iniciar envio)</label>
+                <select name="audience" id="id_audience" class="form-control">
+                    {% for val,label in audience_choices %}
+                    <option value="{{ val }}" {% if campaign.audience == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="chip-form-block">
+                <h3 class="chip-form-block-title">Chips da campanha</h3>
+                <p class="form-info">Só chips do perfil atual. Um chip não pode estar em duas campanhas ativas ao mesmo tempo.</p>
+                {% for chip in available_chips %}
+                <label class="checkbox-label">
+                    <input type="checkbox" name="chip_ids" value="{{ chip.pk }}" {% if chip.pk in chips_sel %}checked{% endif %}>
+                    {{ chip.name }} <code>{{ chip.instance_name }}</code>
+                </label>
+                {% empty %}
+                <p>Nenhum chip disponível. <a href="{% url 'chips:chip_create' %}">Cadastre um chip</a>.</p>
+                {% endfor %}
+            </div>
+
+            <div class="chip-form-block">
+                <h3 class="chip-form-block-title">Variação 1</h3>
+                <div class="form-group">
+                    <label for="id_message_type_1">Tipo</label>
+                    <select name="message_type_1" id="id_message_type_1" class="form-control">
+                        {% for val,label in message_type_choices %}
+                        <option value="{{ val }}" {% if v1 and v1.message_type == val %}selected{% elif not v1 and val == 'text' %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="id_text_1">Texto / legenda</label>
+                    <textarea name="text_1" id="id_text_1" rows="4" class="form-control" placeholder="Use {nome} para o nome do contato.">{% if v1 %}{{ v1.text }}{% endif %}</textarea>
+                </div>
+                <div class="form-group">
+                    <label for="id_media_1">URL da mídia (imagem/vídeo)</label>
+                    <input type="url" name="media_1" id="id_media_1" maxlength="800" class="form-control" value="{% if v1 %}{{ v1.media_url }}{% endif %}">
+                </div>
+            </div>
+
+            <div class="chip-form-block">
+                <h3 class="chip-form-block-title">Variação 2</h3>
+                <div class="form-group">
+                    <label for="id_message_type_2">Tipo</label>
+                    <select name="message_type_2" id="id_message_type_2" class="form-control">
+                        {% for val,label in message_type_choices %}
+                        <option value="{{ val }}" {% if v2 and v2.message_type == val %}selected{% elif not v2 and val == 'text' %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="id_text_2">Texto / legenda</label>
+                    <textarea name="text_2" id="id_text_2" rows="4" class="form-control">{% if v2 %}{{ v2.text }}{% endif %}</textarea>
+                </div>
+                <div class="form-group">
+                    <label for="id_media_2">URL da mídia</label>
+                    <input type="url" name="media_2" id="id_media_2" maxlength="800" class="form-control" value="{% if v2 %}{{ v2.media_url }}{% endif %}">
+                </div>
+            </div>
+
+            <div class="chip-form-block">
+                <h3 class="chip-form-block-title">Variação 3</h3>
+                <div class="form-group">
+                    <label for="id_message_type_3">Tipo</label>
+                    <select name="message_type_3" id="id_message_type_3" class="form-control">
+                        {% for val,label in message_type_choices %}
+                        <option value="{{ val }}" {% if v3 and v3.message_type == val %}selected{% elif not v3 and val == 'text' %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="id_text_3">Texto / legenda</label>
+                    <textarea name="text_3" id="id_text_3" rows="4" class="form-control">{% if v3 %}{{ v3.text }}{% endif %}</textarea>
+                </div>
+                <div class="form-group">
+                    <label for="id_media_3">URL da mídia</label>
+                    <input type="url" name="media_3" id="id_media_3" maxlength="800" class="form-control" value="{% if v3 %}{{ v3.media_url }}{% endif %}">
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Salvar</button>
+                <a href="{% url 'campaigns:campaign_list' %}" class="btn-link">Voltar</a>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %}

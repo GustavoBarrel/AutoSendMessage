@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+{% block title %}{% if editing %}Editar gráfico{% else %}Adicionar gráfico{% endif %} - AutoSendMessage{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">{% if editing %}Editar gráfico{% else %}Adicionar gráfico{% endif %}</h2>
+        <span class="section-badge">{{ dashboard.name }}</span>
+    </div>
+    <div class="section-body">
+        <form method="post" class="widget-form">
+            {% csrf_token %}
+
+            <p class="form-info">
+                Ao escolher <strong>Dados</strong>, leia a explicação abaixo do campo.
+                Os gráficos usam apenas registros de envio da campanha (jobs); filtros avançados restringem campanha, chip e período.
+            </p>
+
+            <div class="form-field" style="grid-column:span 2;">
+                <label for="{{ form.title.id_for_label }}">{{ form.title.label }}</label>
+                {{ form.title }}
+                <small class="form-help">Deixe vazio para usar o nome do dataset automaticamente.</small>
+            </div>
+
+            <div class="widget-form-grid">
+                <div class="form-field">
+                    <label for="{{ form.dataset.id_for_label }}">{{ form.dataset.label }}</label>
+                    {{ form.dataset }}
+                    <div class="dataset-hint dataset-hint-detail" id="dataset-hint"></div>
+                </div>
+
+                <div class="form-field">
+                    <label for="{{ form.chart_type.id_for_label }}">{{ form.chart_type.label }}</label>
+                    {{ form.chart_type }}
+                    <div class="chart-type-hint" id="chart-type-hint"></div>
+                </div>
+
+                <div class="form-field">
+                    <label for="{{ form.size.id_for_label }}">{{ form.size.label }}</label>
+                    {{ form.size }}
+                    <small class="form-help">Define a largura do gráfico no painel.</small>
+                </div>
+            </div>
+
+            <div class="widget-preview-box" id="widget-preview-box">
+                <div class="widget-preview-title">Pré-visualização</div>
+                <div class="widget-preview-hint" id="dataset-hint-preview"></div>
+                <div class="widget-preview-chart-wrap" id="widget-preview-chart-wrap">
+                    <canvas id="widget-preview-canvas"></canvas>
+                </div>
+                <div class="widget-preview-empty" id="widget-preview-empty" style="display:none;">
+                    Sem dados para este período/filtro.
+                </div>
+                <div class="widget-preview-loading" id="widget-preview-loading" style="display:none;">
+                    Carregando pré-visualização…
+                </div>
+            </div>
+
+            <details class="widget-filters-details">
+                <summary>Filtros avançados (opcional)</summary>
+                <p class="form-help" style="margin:.5rem 0 .8rem;">
+                    Use filtros para restringir os dados deste gráfico a uma campanha, chip ou período específico.
+                    Se deixar tudo vazio, o gráfico usa todos os dados dos últimos 30 dias.
+                </p>
+                <div class="widget-form-grid">
+                    <div class="form-field">
+                        <label for="{{ form.filter_campaign_id.id_for_label }}">{{ form.filter_campaign_id.label }}</label>
+                        {{ form.filter_campaign_id }}
+                    </div>
+                    <div class="form-field">
+                        <label for="{{ form.filter_chip_id.id_for_label }}">{{ form.filter_chip_id.label }}</label>
+                        {{ form.filter_chip_id }}
+                    </div>
+                    <div class="form-field">
+                        <label for="{{ form.start_days_ago.id_for_label }}">{{ form.start_days_ago.label }}</label>
+                        {{ form.start_days_ago }}
+                        {% if form.start_days_ago.help_text %}<small class="form-help">{{ form.start_days_ago.help_text }}</small>{% endif %}
+                    </div>
+                    <div class="form-field">
+                        <label for="{{ form.end_days_ago.id_for_label }}">{{ form.end_days_ago.label }}</label>
+                        {{ form.end_days_ago }}
+                        {% if form.end_days_ago.help_text %}<small class="form-help">{{ form.end_days_ago.help_text }}</small>{% endif %}
+                    </div>
+                </div>
+            </details>
+
+            <details class="dataset-glossary-details">
+                <summary>O que significa cada opção em Dados?</summary>
+                <ul class="dataset-glossary-list" id="dataset-glossary-list"></ul>
+            </details>
+
+            {% for error in form.non_field_errors %}
+            <p class="form-error">{{ error }}</p>
+            {% endfor %}
+
+            <div style="display:flex;gap:.75rem;margin-top:1.5rem;">
+                <button type="submit" class="btn-primary">{% if editing %}Salvar{% else %}Adicionar gráfico{% endif %}</button>
+                <a href="{% url 'dashboards:custom_dashboard_view' dashboard.pk %}" class="btn-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</section>
+
+{{ dataset_help|json_script:"dataset-help-data" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    var previewUrl = "{{ widget_preview_url|escapejs }}";
+    var datasetHelp = {};
+    try {
+        var helpNode = document.getElementById("dataset-help-data");
+        if (helpNode) datasetHelp = JSON.parse(helpNode.textContent);
+    } catch (e) {
+        datasetHelp = {};
+    }
+
+    var chartHints = {
+        "bar": "Ideal para comparar quantidades entre categorias (chips, campanhas).",
+        "line": "Ideal para evolução ao longo do tempo (diário, por hora).",
+        "pie": "Ideal para proporção/distribuição (status, % de cada chip).",
+        "doughnut": "Similar à pizza, com visual mais limpo.",
+    };
+
+    var dsSelect = document.getElementById("id_dataset");
+    var ctSelect = document.getElementById("id_chart_type");
+    var titleInput = document.getElementById("id_title");
+    var dsHint = document.getElementById("dataset-hint");
+    var ctHint = document.getElementById("chart-type-hint");
+    var dsHintPreview = document.getElementById("dataset-hint-preview");
+    var previewCanvas = document.getElementById("widget-preview-canvas");
+    var previewEmpty = document.getElementById("widget-preview-empty");
+    var previewLoading = document.getElementById("widget-preview-loading");
+    var previewChartWrap = document.getElementById("widget-preview-chart-wrap");
+    var filterCampaign = document.getElementById("id_filter_campaign_id");
+    var filterChip = document.getElementById("id_filter_chip_id");
+    var startDays = document.getElementById("id_start_days_ago");
+    var endDays = document.getElementById("id_end_days_ago");
+
+    var previewChart = null;
+    var previewTimer = null;
+    var palette = [
+        getComputedStyle(document.documentElement).getPropertyValue("--color-primary").trim(), "#7b1fa2", "#303f9f", "#0288d1", "#00796b",
+        "#2e7d32", "#f9a825", "#ef6c00", "#d84315", "#6d4c41",
+    ];
+
+    function colorsFor(n) {
+        var out = [];
+        for (var i = 0; i < n; i++) out.push(palette[i % palette.length]);
+        return out;
+    }
+
+    function formatDatasetHint(key) {
+        var h = datasetHelp[key] || {};
+        if (!h.detail) return "";
+        var html = "<strong>" + (h.label || key) + "</strong><p>" + h.detail + "</p>";
+        if (h.rec) html += '<p class="dataset-hint-rec">Gráfico sugerido: <em>' + h.rec + "</em></p>";
+        return html;
+    }
+
+    function buildGlossary() {
+        var list = document.getElementById("dataset-glossary-list");
+        if (!list) return;
+        list.innerHTML = "";
+        Object.keys(datasetHelp).forEach(function(key) {
+            var h = datasetHelp[key];
+            var li = document.createElement("li");
+            li.innerHTML = "<strong>" + (h.label || key) + "</strong><p>" + (h.detail || "") + "</p>";
+            list.appendChild(li);
+        });
+    }
+
+    function updateHints() {
+        if (dsSelect && dsHint) {
+            var hintHtml = formatDatasetHint(dsSelect.value);
+            dsHint.innerHTML = hintHtml;
+            if (dsHintPreview) dsHintPreview.innerHTML = hintHtml;
+        }
+        if (ctSelect && ctHint) {
+            ctHint.textContent = chartHints[ctSelect.value] || '';
+        }
+    }
+
+    function previewParams() {
+        var params = new URLSearchParams();
+        if (dsSelect) params.set("dataset", dsSelect.value || "status");
+        if (ctSelect) params.set("chart_type", ctSelect.value || "bar");
+        if (titleInput && titleInput.value) params.set("title", titleInput.value);
+        if (filterCampaign && filterCampaign.value) params.set("filter_campaign_id", filterCampaign.value);
+        if (filterChip && filterChip.value) params.set("filter_chip_id", filterChip.value);
+        if (startDays && startDays.value !== "") params.set("start_days_ago", startDays.value);
+        if (endDays && endDays.value !== "") params.set("end_days_ago", endDays.value);
+        return params;
+    }
+
+    function renderPreviewChart(payload, chartType) {
+        if (!window.Chart || !previewCanvas) return;
+        var labels = (payload && payload.labels) || [];
+        var values = (payload && payload.values) || [];
+        var colors = colorsFor(labels.length || 1);
+        var allowBorder = chartType === "line" || chartType === "bar";
+        if (previewChart) previewChart.destroy();
+        previewChart = new Chart(previewCanvas, {
+            type: chartType,
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: (payload && payload.label) || "Dados",
+                    data: values,
+                    backgroundColor: colors,
+                    borderColor: allowBorder ? "#5f0f40" : colors,
+                    borderWidth: allowBorder ? 2 : 1,
+                    fill: chartType !== "line",
+                    tension: chartType === "line" ? 0.25 : 0,
+                }],
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: chartType !== "bar" && chartType !== "line" },
+                },
+                scales: (chartType === "bar" || chartType === "line") ? {
+                    y: { beginAtZero: true, ticks: { precision: 0 } },
+                } : {},
+            },
+        });
+    }
+
+    function loadPreview() {
+        if (!dsSelect || !ctSelect) return;
+        if (previewLoading) previewLoading.style.display = "block";
+        if (previewEmpty) previewEmpty.style.display = "none";
+        if (previewChartWrap) previewChartWrap.style.display = "block";
+
+        fetch(previewUrl + "?" + previewParams().toString(), {
+            headers: { "Accept": "application/json" },
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (previewLoading) previewLoading.style.display = "none";
+                if (!data.ok || !data.has_data) {
+                    if (previewChart) { previewChart.destroy(); previewChart = null; }
+                    if (previewChartWrap) previewChartWrap.style.display = "none";
+                    if (previewEmpty) previewEmpty.style.display = "block";
+                    return;
+                }
+                renderPreviewChart(data.payload, data.chart_type || ctSelect.value);
+            })
+            .catch(function () {
+                if (previewLoading) previewLoading.style.display = "none";
+                if (previewChartWrap) previewChartWrap.style.display = "none";
+                if (previewEmpty) {
+                    previewEmpty.textContent = "Não foi possível carregar a pré-visualização.";
+                    previewEmpty.style.display = "block";
+                }
+            });
+    }
+
+    function schedulePreview() {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(loadPreview, 350);
+    }
+
+    function bindPreview(el) {
+        if (!el) return;
+        el.addEventListener("change", function () {
+            updateHints();
+            schedulePreview();
+        });
+        if (el.tagName === "INPUT") el.addEventListener("input", schedulePreview);
+    }
+
+    bindPreview(dsSelect);
+    bindPreview(ctSelect);
+    bindPreview(titleInput);
+    bindPreview(filterCampaign);
+    bindPreview(filterChip);
+    bindPreview(startDays);
+    bindPreview(endDays);
+
+    buildGlossary();
+    updateHints();
+    schedulePreview();
+})();
+</script>
+
+<style>
+    .widget-form { max-width: 640px; }
+    .widget-form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: .85rem;
+    }
+    .form-field { margin-bottom: .5rem; }
+    .form-field label { display: block; font-weight: 600; margin-bottom: .3rem; font-size: .9rem; }
+    .form-field input,
+    .form-field select {
+        width: 100%;
+        padding: .55rem .7rem;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        background: #fff;
+        font-size: .9rem;
+    }
+    .form-help { color: #888; font-size: .82rem; margin-top: .2rem; display: block; }
+    .form-error { color: #c62828; font-size: .82rem; margin-top: .2rem; }
+    .widget-filters-details {
+        margin-top: 1rem;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: .8rem 1rem;
+    }
+    .widget-filters-details summary {
+        cursor: pointer;
+        font-weight: 600;
+        font-size: .9rem;
+        color: #555;
+    }
+    .dataset-hint, .chart-type-hint {
+        font-size: .82rem;
+        color: #666;
+        margin-top: .35rem;
+        line-height: 1.45;
+    }
+    .dataset-hint-detail p { margin: .35rem 0 0; }
+    .dataset-hint-rec { margin: .25rem 0 0; font-size: .8rem; }
+    .dataset-hint em { color: var(--color-primary); font-style: normal; font-weight: 500; }
+    .dataset-glossary-details {
+        margin-top: 1rem;
+        border: 1px solid #e8e8e8;
+        border-radius: 8px;
+        padding: .75rem 1rem;
+        background: #fafafa;
+    }
+    .dataset-glossary-details summary {
+        cursor: pointer;
+        font-weight: 600;
+        font-size: .88rem;
+    }
+    .dataset-glossary-list {
+        margin: .75rem 0 0;
+        padding: 0;
+        list-style: none;
+        max-height: 320px;
+        overflow-y: auto;
+    }
+    .dataset-glossary-list li {
+        padding: .55rem 0;
+        border-bottom: 1px solid #eee;
+        font-size: .82rem;
+        line-height: 1.45;
+    }
+    .dataset-glossary-list li:last-child { border-bottom: none; }
+    .dataset-glossary-list strong { display: block; color: #333; margin-bottom: .2rem; }
+    .widget-preview-box {
+        margin-top: 1.2rem;
+        border: 2px dashed #e0e0e0;
+        border-radius: 12px;
+        padding: 1rem;
+        text-align: center;
+    }
+    .widget-preview-title {
+        font-size: .8rem;
+        font-weight: 600;
+        color: #999;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        margin-bottom: .6rem;
+    }
+    .widget-preview-hint {
+        font-size: .82rem;
+        color: #666;
+        margin-bottom: .6rem;
+        line-height: 1.45;
+        text-align: left;
+    }
+    .widget-preview-chart-wrap {
+        min-height: 220px;
+        position: relative;
+    }
+    .widget-preview-empty,
+    .widget-preview-loading {
+        font-size: .88rem;
+        color: #888;
+        padding: 1.5rem 0;
+    }
+</style>
+{% endblock %}

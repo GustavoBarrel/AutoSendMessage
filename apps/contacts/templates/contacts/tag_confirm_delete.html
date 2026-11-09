@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Excluir tag{% endblock %}
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Excluir tag</h2>
+        <a href="{% url 'contacts:manual_tag_list' %}" class="btn-secondary">Voltar</a>
+    </div>
+    <div class="section-body">
+        <div class="alert alert-warning">
+            <strong>Atenção:</strong> a tag <strong>{{ tag.name }}</strong> será removida dos contatos vinculados.
+        </div>
+        <form method="post" action="{% url 'contacts:manual_tag_delete' tag.pk %}" class="form-perfil" style="margin-top:1rem;">
+            {% csrf_token %}
+            <div class="form-actions">
+                <button type="submit" class="btn-danger-outline">Sim, excluir</button>
+                <a href="{% url 'contacts:manual_tag_list' %}" class="btn-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %}
+

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Escolher perfil - AutoSendMessage{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="section-header">
+    <h2 class="section-title">Escolher perfil</h2>
+    <div class="section-actions">
+      <a href="{% url 'accounts:workspace_create' %}" class="btn-primary">Novo perfil</a>
+      <a href="{% url 'accounts:workspace_list' %}" class="btn-secondary">Gerenciar perfis</a>
+    </div>
+  </div>
+  <div class="section-body">
+    {% if workspaces %}
+      <div class="dashboard-cards">
+        {% for p in workspaces %}
+        <article class="perfil-modern-card" style="--perfil-cor: {{ p.color }};">
+          <div class="perfil-modern-header">
+            <div class="perfil-modern-title-wrap">
+              <div class="perfil-modern-title">{{ p.name }}</div>
+              <div class="perfil-modern-sub">
+                <span class="perfil-modern-pill"><code>{{ p.slug }}</code></span>
+              </div>
+            </div>
+          </div>
+          <div class="perfil-modern-actions">
+            <form action="{% url 'accounts:workspace_set' %}" method="post" class="perfil-modern-form">
+              {% csrf_token %}
+              <button type="submit" name="workspace_id" value="{{ p.pk }}" class="perfil-modern-primary">Selecionar</button>
+            </form>
+            <div class="perfil-modern-links">
+              <a href="{% url 'accounts:workspace_edit' p.pk %}" class="perfil-modern-link">Editar</a>
+              <a href="{% url 'accounts:workspace_confirm_delete' p.pk %}" class="perfil-modern-link perfil-modern-link--danger">Excluir</a>
+            </div>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p>Nenhum perfil cadastrado.</p>
+      <a href="{% url 'accounts:workspace_create' %}" class="btn-primary">Criar perfil</a>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+

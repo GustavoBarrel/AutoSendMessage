@@ -1,0 +1,10 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ"]
+
+[tool.ruff.lint.per-file-ignores]
+# Migrations são geradas pelo Django e trazem help_text/choices em linha única.
+"**/migrations/*.py" = ["E501"]

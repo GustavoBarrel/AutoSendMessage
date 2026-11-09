@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Tags - AutoSendMessage{% endblock %}
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Tags</h2>
+        <div class="section-actions">
+            <a href="{% url 'contacts:manual_tag_create' %}" class="btn-primary">Nova tag</a>
+            <a href="{% url 'contacts:contact_list' %}" class="btn-secondary">Voltar: contatos</a>
+        </div>
+    </div>
+    <div class="section-body">
+        <form method="get" class="contato-search-form" action="{% url 'contacts:manual_tag_list' %}">
+            <label for="tag-search" class="sr-only">Buscar tag</label>
+            <input type="search" id="tag-search" name="q" value="{{ q }}" placeholder="Buscar tag..." class="input-search-contato" />
+            <button type="submit" class="btn-secondary">Buscar</button>
+            {% if q %}
+            <a href="{% url 'contacts:manual_tag_list' %}" class="btn-secondary">Limpar</a>
+            {% endif %}
+        </form>
+
+        {% if tags %}
+        <table class="table-perfis" style="margin-top:1rem;">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Contatos</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in tags %}
+                <tr>
+                    <td><strong>{{ t.name }}</strong></td>
+                    <td style="color:#616161;">{{ t.contacts.count }}</td>
+                    <td style="white-space:nowrap;">
+                        <a href="{% url 'contacts:manual_tag_edit' t.pk %}" class="btn-link">Editar</a>
+                        <a href="{% url 'contacts:manual_tag_confirm_delete' t.pk %}" class="btn-link btn-link-danger">Excluir</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <div class="icon">🏷️</div>
+            <p>Nenhuma tag ainda.</p>
+            <a href="{% url 'contacts:manual_tag_create' %}" class="btn-primary">Criar primeira tag</a>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}
+

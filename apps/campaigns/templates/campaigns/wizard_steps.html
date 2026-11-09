@@ -1,0 +1,28 @@
+{# wizard_step: 1 audience | 2 chips | 3 messages #}
+<div class="import-wizard" aria-label="Etapas da campanha">
+    <ol class="import-wizard-steps">
+        <li class="import-wizard-step {% if wizard_step > 1 %}import-wizard-step--done{% elif wizard_step == 1 %}import-wizard-step--current{% else %}import-wizard-step--todo{% endif %}">
+            <span class="import-wizard-dot">{% if wizard_step > 1 %}✓{% else %}1{% endif %}</span>
+            <span class="import-wizard-label">Público</span>
+        </li>
+        <li class="import-wizard-connector {% if wizard_step > 2 %}import-wizard-connector--done{% endif %}"></li>
+        <li class="import-wizard-step {% if wizard_step > 2 %}import-wizard-step--done{% elif wizard_step == 2 %}import-wizard-step--current{% else %}import-wizard-step--todo{% endif %}">
+            <span class="import-wizard-dot">{% if wizard_step > 2 %}✓{% else %}2{% endif %}</span>
+            <span class="import-wizard-label">Chips</span>
+        </li>
+        <li class="import-wizard-connector {% if wizard_step >= 3 %}import-wizard-connector--done{% endif %}"></li>
+        <li class="import-wizard-step {% if wizard_step == 3 %}import-wizard-step--current{% else %}import-wizard-step--todo{% endif %}">
+            <span class="import-wizard-dot">3</span>
+            <span class="import-wizard-label">Mensagens</span>
+        </li>
+    </ol>
+    <p class="import-wizard-hint">
+        {% if wizard_step == 1 %}
+        <strong>Etapa 1 de 3</strong> — Defina quem recebe: base (todos ou aniversariantes), refine por cidade, UF, bairro, categorias; confira a lista paginada e inclua ou exclua contatos.
+        {% elif wizard_step == 2 %}
+        <strong>Etapa 2 de 3</strong> — Escolha os chips que enviarão as mensagens (ao menos um).
+        {% else %}
+        <strong>Etapa 3 de 3</strong> — Última etapa: até três variações de mensagem; depois salve e abra o painel para iniciar o envio.
+        {% endif %}
+    </p>
+</div>

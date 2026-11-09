@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{% if tag %}Editar tag{% else %}Nova tag{% endif %}{% endblock %}
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">{% if tag %}Editar tag{% else %}Nova tag{% endif %}</h2>
+        <a href="{% url 'contacts:manual_tag_list' %}" class="btn-secondary">Voltar</a>
+    </div>
+    <div class="section-body">
+        <form method="post" class="form-perfil">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="id_name">Nome</label>
+                <input type="text" name="name" id="id_name" maxlength="60" required class="form-control"
+                       value="{{ name|default:'' }}" placeholder="Ex.: Clientes VIP">
+                <p class="form-info" style="margin-top:.35rem;">
+                    Use nomes curtos e consistentes. Evite variações duplicadas (ex.: “Cliente VIP” vs “Clientes VIP”).
+                </p>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Salvar</button>
+                <a href="{% url 'contacts:manual_tag_list' %}" class="btn-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %}
+

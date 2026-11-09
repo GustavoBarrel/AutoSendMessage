@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Arquivar campanha{% endblock %}
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Arquivar campanha</h2>
+    </div>
+    <div class="section-body">
+        <p>Tem certeza que deseja arquivar a campanha <strong>{{ campaign.name }}</strong>?</p>
+        <p class="form-info">
+            A campanha <strong>não será apagada</strong> — ficará arquivada e poderá ser consultada
+            depois em "Campanhas → Arquivadas". Todo o histórico de tentativas e envios é preservado.
+        </p>
+        {% if campaign.status == 'active' %}
+        <p class="form-info" style="color:#e65100;font-weight:600;">
+            Atenção: a campanha está ativa. Os envios serão interrompidos e os jobs pendentes cancelados.
+        </p>
+        {% endif %}
+        <div style="display:flex;gap:1rem;margin-top:1.5rem;">
+            <form method="post" action="{% url 'campaigns:campaign_delete' campaign.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn-primary" style="background:#c62828;border-color:#c62828;">Sim, arquivar</button>
+            </form>
+            <a href="{% url 'campaigns:campaign_detail' campaign.pk %}" class="btn-secondary">Cancelar</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

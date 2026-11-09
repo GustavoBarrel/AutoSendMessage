@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Debug Evolution - AutoSendMessage{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Debug Evolution</h2>
+        <a href="{% url 'dashboards:home' %}" class="btn-secondary">Voltar</a>
+    </div>
+    <div class="section-body">
+        <form method="post" style="margin-bottom: 1rem;">
+            {% csrf_token %}
+            <button type="submit" name="clear" value="1" class="btn-secondary">Limpar log</button>
+        </form>
+        {% if log %}
+            <div class="debug-log">
+            {% for item in log %}
+                <div class="debug-log-item" style="margin-bottom: 1rem;">
+                    <div><strong>{{ item.type }}</strong> — {{ item.time }}</div>
+                    <div><code>{{ item.url }}</code></div>
+                    {% if item.request_body %}<pre style="white-space: pre-wrap;">{{ item.request_body }}</pre>{% endif %}
+                    {% if item.response_status %}<div>Status: <code>{{ item.response_status }}</code></div>{% endif %}
+                    {% if item.response_body %}<pre style="white-space: pre-wrap;">{{ item.response_body }}</pre>{% endif %}
+                    {% if item.error %}<pre style="white-space: pre-wrap;">{{ item.error }}</pre>{% endif %}
+                </div>
+            {% endfor %}
+            </div>
+        {% else %}
+            <p>Nenhum log ainda.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}
+

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Arquivar contato{% endblock %}
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Arquivar contato</h2>
+    </div>
+    <div class="section-body">
+        <p>Tem certeza que deseja arquivar o contato <strong>{{ contact.name }}</strong> (<code>{{ contact.mobile_phone }}</code>)?</p>
+
+        {% if total_pending %}
+        <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:1rem;margin:1rem 0;">
+            <strong style="color:#856404;">⚠ Atenção:</strong>
+            <span style="color:#856404;">
+                Este contato possui <strong>{{ total_pending }}</strong> envio(s) pendente(s) em campanha(s).
+                Ao arquivar, esses envios serão <strong>cancelados</strong> automaticamente.
+            </span>
+            <ul style="margin:.5rem 0 0;color:#856404;font-size:.9rem;">
+                {% for c in campaigns_affected %}
+                <li>{{ c.name }} — {{ c.count }} envio(s) pendente(s)</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <p class="form-info" style="font-size:.88rem;color:#666;">
+            O contato será arquivado (não aparecerá mais na lista nem em novas campanhas).
+            O histórico de envios anteriores será mantido nas estatísticas.
+            <strong>Não há como desarquivar pela interface.</strong>
+            {% if total_pending %}Os envios pendentes serão marcados como "Cancelado — Contato excluído manualmente".{% endif %}
+        </p>
+
+        <div style="display:flex;gap:1rem;margin-top:1.5rem;">
+            <form method="post" action="{% url 'contacts:contact_delete' contact.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn-primary" style="background:#c62828;border-color:#c62828;">
+                    Sim, arquivar{% if total_pending %} e cancelar {{ total_pending }} envio(s){% endif %}
+                </button>
+            </form>
+            <a href="{% url 'contacts:contact_list' %}" class="btn-secondary">Voltar</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

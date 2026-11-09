@@ -1,0 +1,727 @@
+{% extends "base.html" %}
+{% load common_extras %}
+{% block title %}Estatísticas - AutoSendMessage{% endblock %}
+
+{% block content %}
+
+{# ── Automatic alerts ── #}
+{% if alerts %}
+<section class="section" style="padding-bottom:0;">
+    <div class="section-body">
+        {% for alert in alerts %}
+        <div class="stats-alert stats-alert--{{ alert.level }}">
+            {% if alert.level == 'danger' %}⛔{% elif alert.level == 'warning' %}⚠️{% else %}ℹ️{% endif %}
+            {{ alert.message }}
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{# ── Active campaigns progress ── #}
+{% if active_progress %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Campanhas ativas — progresso</h2>
+    </div>
+    <div class="section-body">
+        <div class="progress-grid">
+            {% for p in active_progress %}
+            <div class="progress-card">
+                <div class="progress-card__header">
+                    <strong>{{ p.name }}</strong>
+                    <span class="progress-card__pct">{{ p.pct }}%</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" style="width:{{ p.pct }}%"></div>
+                </div>
+                <div class="progress-card__details">
+                    <span>✓ {{ p.sent }} enviados</span>
+                    <span>✗ {{ p.failed }} falhas</span>
+                    <span>⏳ {{ p.pending }} pendentes</span>
+                    <span>Total: {{ p.total }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{# ── Filters ── #}
+<section class="section">
+    <div class="section-header">
+        <div>
+            <h2 class="section-title">Estatísticas</h2>
+            {% if current_workspace %}<span class="section-badge">{{ current_workspace.name }}</span>{% endif %}
+        </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <a href="{% url 'dashboards:custom_dashboard_list' %}" class="btn-primary">📊 Meus painéis</a>
+            <a href="{% url 'dashboards:stats_export_csv' %}?{{ request.GET.urlencode }}" class="btn-secondary" title="Exportar dados filtrados">
+                📥 Exportar CSV
+            </a>
+        </div>
+    </div>
+    <div class="section-body">
+        <form method="get" class="stats-filters">
+            <div class="stats-filter-field">
+                <label for="id_start">Data inicial</label>
+                <input type="date" id="id_start" name="start" value="{{ start_date|date:'Y-m-d' }}">
+            </div>
+            <div class="stats-filter-field">
+                <label for="id_end">Data final</label>
+                <input type="date" id="id_end" name="end" value="{{ end_date|date:'Y-m-d' }}">
+            </div>
+            <div class="stats-filter-field">
+                <label for="id_date_field">Base da data</label>
+                <select id="id_date_field" name="date_field">
+                    <option value="created" {% if selected_date_field == 'created' %}selected{% endif %}>Criação do job</option>
+                    <option value="updated" {% if selected_date_field == 'updated' %}selected{% endif %}>Última atualização</option>
+                    <option value="sent" {% if selected_date_field == 'sent' %}selected{% endif %}>Data de envio</option>
+                </select>
+            </div>
+            <div class="stats-filter-field">
+                <label for="id_campaign">Campanha</label>
+                <select id="id_campaign" name="campaign_id">
+                    <option value="">Todas</option>
+                    {% for campaign in campaign_options %}
+                    <option value="{{ campaign.pk }}" {% if selected_campaign and selected_campaign.pk == campaign.pk %}selected{% endif %}>
+                        {{ campaign.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="stats-filter-field">
+                <label for="id_chip">Chip</label>
+                <select id="id_chip" name="chip_id">
+                    <option value="">Todos</option>
+                    {% for chip in chip_options %}
+                    <option value="{{ chip.pk }}" {% if selected_chip and selected_chip.pk == chip.pk %}selected{% endif %}>
+                        {{ chip.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="stats-filter-field">
+                <label for="id_status">Status</label>
+                <select id="id_status" name="status">
+                    <option value="">Todos</option>
+                    {% for value, label in status_choices %}
+                    <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="stats-filter-field stats-filter-field--dataset">
+                <label for="id_dataset">Dados do gráfico</label>
+                <select id="id_dataset" name="dataset">
+                    {% for value, label in dataset_options %}
+                    <option value="{{ value }}" {% if selected_dataset == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <div class="dataset-hint-detail" id="stats-dataset-hint"></div>
+            </div>
+            <div class="stats-filter-field">
+                <label for="id_chart">Layout</label>
+                <select id="id_chart" name="chart">
+                    <option value="bar" {% if selected_chart_type == 'bar' %}selected{% endif %}>Barra</option>
+                    <option value="line" {% if selected_chart_type == 'line' %}selected{% endif %}>Linha</option>
+                    <option value="pie" {% if selected_chart_type == 'pie' %}selected{% endif %}>Pizza</option>
+                    <option value="doughnut" {% if selected_chart_type == 'doughnut' %}selected{% endif %}>Rosca</option>
+                </select>
+            </div>
+            <div class="stats-filter-actions">
+                <button type="submit" class="btn-primary">Aplicar</button>
+                <a href="{% url 'dashboards:stats_dashboard' %}" class="btn-secondary">Limpar</a>
+            </div>
+        </form>
+    </div>
+</section>
+
+{# ── Summary cards ── #}
+<section class="section">
+    <div class="section-body">
+        <div class="dashboard-cards">
+            <div class="dashboard-card">
+                <div class="label">Total de mensagens</div>
+                <div class="value">{{ totals.total|default:0 }}</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="label">Enviadas com sucesso</div>
+                <div class="value">{{ totals.sent|default:0 }}</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="label">Falhas</div>
+                <div class="value">{{ totals.failed|default:0 }}</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="label">Pendentes</div>
+                <div class="value">{{ totals.pending|default:0 }}</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="label">Aguardando chip</div>
+                <div class="value">{{ totals.waiting_chip|default:0 }}</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="label">Taxa sucesso (enviado/finalizado)</div>
+                <div class="value">{% if success_rate is not None %}{{ success_rate|floatformat:1 }}%{% else %}—{% endif %}</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="label">Taxa entrega (enviado/total)</div>
+                <div class="value">{% if delivery_rate is not None %}{{ delivery_rate|floatformat:1 }}%{% else %}—{% endif %}</div>
+            </div>
+            <div class="dashboard-card">
+                <div class="label">Canceladas + Ignoradas</div>
+                <div class="value">{{ cancelled_and_skipped|default:0 }}</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ── Main chart ── #}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Visualização</h2>
+    </div>
+    <div class="section-body">
+        <div class="stats-chart-wrap">
+            <canvas id="stats_chart_canvas"></canvas>
+        </div>
+    </div>
+</section>
+
+{# ── Chip health ── #}
+{% if chip_health %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Saúde dos chips (hoje)</h2>
+    </div>
+    <div class="section-body">
+        <div class="chip-health-grid">
+            {% for c in chip_health %}
+            <div class="chip-health-card {% if c.failed_today > 5 and c.sent_today == 0 %}chip-health-card--danger{% elif c.success_pct is not None and c.success_pct < 80 %}chip-health-card--warning{% endif %}">
+                <div class="chip-health-card__name">{{ c.name }}</div>
+                <div class="chip-health-card__instance"><code>{{ c.instance_name }}</code></div>
+                <div class="chip-health-card__stats">
+                    <div><span class="chip-health-label">Hoje:</span> ✓ {{ c.sent_today }} &nbsp; ✗ {{ c.failed_today }}</div>
+                    <div><span class="chip-health-label">Histórico:</span> ✓ {{ c.total_sent }} &nbsp; ✗ {{ c.total_failed }}</div>
+                    <div><span class="chip-health-label">Taxa sucesso:</span> {% if c.success_pct is not None %}{{ c.success_pct }}%{% else %}—{% endif %}</div>
+                    <div><span class="chip-health-label">Na fila:</span> {{ c.pending }}</div>
+                    <div><span class="chip-health-label">Último envio:</span> {% if c.last_sent %}{{ c.last_sent|date:"d/m/Y H:i" }}{% else %}—{% endif %}</div>
+                    <div><span class="chip-health-label">Tipo:</span> {{ c.account_type }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{# ── Summary by status ── #}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Resumo por status</h2>
+    </div>
+    <div class="section-body">
+        <table class="table-perfis">
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in status_rows %}
+                <tr>
+                    <td>{{ row.label }}</td>
+                    <td>{{ row.total }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{# ── Failure rate per chip ── #}
+{% if chip_fail_rate %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Taxa de falha por chip</h2>
+    </div>
+    <div class="section-body">
+        <table class="table-perfis">
+            <thead>
+                <tr>
+                    <th>Chip</th>
+                    <th>Total</th>
+                    <th>Sucesso</th>
+                    <th>Falha</th>
+                    <th>Taxa falha</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in chip_fail_rate %}
+                <tr>
+                    <td>{{ row.chip_name_display }}</td>
+                    <td>{{ row.total }}</td>
+                    <td>{{ row.sent }}</td>
+                    <td>{{ row.failed }}</td>
+                    <td>
+                        <span class="{% if row.fail_rate > 30 %}text-danger{% elif row.fail_rate > 10 %}text-warning{% else %}text-success{% endif %}">
+                            {{ row.fail_rate }}%
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+{# ── Average send time per chip ── #}
+{% if chip_avg_time %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Tempo médio de envio por chip</h2>
+    </div>
+    <div class="section-body">
+        <table class="table-perfis">
+            <thead>
+                <tr>
+                    <th>Chip</th>
+                    <th>Tempo médio (criação → envio)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in chip_avg_time %}
+                <tr>
+                    <td>{{ row.chip_name_display }}</td>
+                    <td>
+                        {% if row.avg_minutes < 60 %}
+                            {{ row.avg_minutes }} min
+                        {% else %}
+                            {{ row.avg_minutes|floatformat:0 }} min (~{{ row.avg_minutes|divisibleby:60 }}h)
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+{# ── Top chips ── #}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Top chips</h2>
+    </div>
+    <div class="section-body">
+        {% if by_chip_rows %}
+        <table class="table-perfis">
+            <thead>
+                <tr>
+                    <th>Chip</th>
+                    <th>Total</th>
+                    <th>Sucesso</th>
+                    <th>Falha</th>
+                    <th>Pendente</th>
+                    <th>Aguardando chip</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in by_chip_rows %}
+                <tr>
+                    <td>{{ row.chip_name_display }}</td>
+                    <td>{{ row.total }}</td>
+                    <td>{{ row.sent }}</td>
+                    <td>{{ row.failed }}</td>
+                    <td>{{ row.pending }}</td>
+                    <td>{{ row.waiting_chip }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>Nenhum dado para o filtro atual.</p>
+        {% endif %}
+    </div>
+</section>
+
+{# ── Top campaigns ── #}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Top campanhas</h2>
+    </div>
+    <div class="section-body">
+        {% if by_campaign_rows %}
+        <table class="table-perfis">
+            <thead>
+                <tr>
+                    <th>Campanha</th>
+                    <th>Total</th>
+                    <th>Sucesso</th>
+                    <th>Falha</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in by_campaign_rows %}
+                <tr>
+                    <td>{{ row.campaign_name_display }}</td>
+                    <td>{{ row.total }}</td>
+                    <td>{{ row.sent }}</td>
+                    <td>{{ row.failed }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>Nenhum dado para o filtro atual.</p>
+        {% endif %}
+    </div>
+</section>
+
+{# ── Top errors ── #}
+{% if top_errors %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Erros mais frequentes</h2>
+    </div>
+    <div class="section-body">
+        <table class="table-perfis">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Erro</th>
+                    <th>Ocorrências</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in top_errors %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td><code class="error-text">{{ row.error }}</code></td>
+                    <td><strong>{{ row.count }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+{# ── Contacts without WhatsApp ── #}
+{% if contacts_no_wpp %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Contatos sem WhatsApp (exists=false)</h2>
+    </div>
+    <div class="section-body">
+        <p style="font-size:.86rem;color:#666;margin-bottom:.75rem;">
+            Contatos que falharam permanentemente — número não está no WhatsApp. Considere arquivar ou remover da base.
+        </p>
+        <table class="table-perfis">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Celular</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in contacts_no_wpp %}
+                <tr>
+                    <td>{{ c.name }}</td>
+                    <td><code>{{ c.mobile_phone }}</code></td>
+                    <td>{% if c.archived %}<span class="badge-inativo">Arquivado</span>{% else %}<span class="badge-ativo">Ativo</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+{# ── Chart.js ── #}
+{{ chart_payload|json_script:"stats_chart_payload" }}
+{{ dataset_help|json_script:"dataset-help-data" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+    (function () {
+        var datasetHelp = {};
+        try {
+            var helpNode = document.getElementById("dataset-help-data");
+            if (helpNode) datasetHelp = JSON.parse(helpNode.textContent);
+        } catch (e) { datasetHelp = {}; }
+
+        function updateDatasetHint() {
+            var sel = document.getElementById("id_dataset");
+            var box = document.getElementById("stats-dataset-hint");
+            if (!sel || !box) return;
+            var h = datasetHelp[sel.value] || {};
+            if (!h.detail) { box.innerHTML = ""; return; }
+            box.innerHTML = "<strong>" + (h.label || sel.value) + "</strong><p>" + h.detail + "</p>"
+                + (h.rec ? '<p class="dataset-hint-rec">Gráfico sugerido: <em>' + h.rec + "</em></p>" : "");
+        }
+
+        var raw = document.getElementById("stats_chart_payload");
+        if (!raw) return;
+        var payload = {};
+        try {
+            payload = JSON.parse(raw.textContent);
+        } catch (e) {
+            payload = {};
+        }
+
+        var datasetSelect = document.getElementById("id_dataset");
+        var chartTypeSelect = document.getElementById("id_chart");
+        var canvas = document.getElementById("stats_chart_canvas");
+        if (!canvas || !window.Chart || !datasetSelect || !chartTypeSelect) return;
+
+        var palette = [
+            getComputedStyle(document.documentElement).getPropertyValue("--color-primary").trim(), "#7b1fa2", "#303f9f", "#0288d1", "#00796b",
+            "#2e7d32", "#f9a825", "#ef6c00", "#d84315", "#6d4c41",
+            "#546e7a", "#1565c0", "#ad1457", "#4527a0", "#00838f",
+        ];
+        var chartInstance = null;
+
+        function colorsFor(size) {
+            var out = [];
+            for (var i = 0; i < size; i++) out.push(palette[i % palette.length]);
+            return out;
+        }
+
+        function getDatasetConfig() {
+            var datasetKey = datasetSelect.value;
+            var chartType = chartTypeSelect.value;
+            var selected = payload[datasetKey] || payload.status || { labels: [], values: [], label: "Sem dados" };
+            var labels = selected.labels || [];
+            var values = selected.values || [];
+            var colors = colorsFor(labels.length || 1);
+            var allowBorder = chartType === "line" || chartType === "bar";
+            return {
+                type: chartType,
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: selected.label || "Dados",
+                            data: values,
+                            backgroundColor: colors,
+                            borderColor: allowBorder ? "#5f0f40" : colors,
+                            borderWidth: allowBorder ? 2 : 1,
+                            fill: chartType === "line" ? false : true,
+                            tension: chartType === "line" ? 0.25 : 0,
+                        },
+                    ],
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: chartType !== "bar" && chartType !== "line",
+                        },
+                    },
+                    scales: (chartType === "bar" || chartType === "line") ? {
+                        y: { beginAtZero: true, ticks: { precision: 0 } },
+                    } : {},
+                },
+            };
+        }
+
+        function renderChart() {
+            if (chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(canvas, getDatasetConfig());
+        }
+
+        datasetSelect.addEventListener("change", function () {
+            updateDatasetHint();
+            renderChart();
+        });
+        chartTypeSelect.addEventListener("change", renderChart);
+        updateDatasetHint();
+        renderChart();
+    })();
+</script>
+
+<style>
+    .stats-filters {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: .85rem;
+        align-items: end;
+    }
+    .stats-filter-field {
+        display: flex;
+        flex-direction: column;
+        gap: .35rem;
+    }
+    .stats-filter-field label {
+        font-weight: 600;
+        font-size: .86rem;
+    }
+    .stats-filter-field input,
+    .stats-filter-field select {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: .52rem .6rem;
+        background: #fff;
+    }
+    .stats-filter-field--dataset {
+        grid-column: 1 / -1;
+    }
+    .dataset-hint-detail {
+        font-size: .82rem;
+        color: #555;
+        line-height: 1.45;
+        margin-top: .4rem;
+        padding: .55rem .65rem;
+        background: #faf8fa;
+        border-radius: 8px;
+        border: 1px solid #eee;
+    }
+    .dataset-hint-detail p { margin: .3rem 0 0; }
+    .dataset-hint-rec { margin: .2rem 0 0; font-size: .8rem; }
+    .dataset-hint-detail em { color: var(--color-primary); font-style: normal; font-weight: 500; }
+    .stats-filter-actions {
+        display: flex;
+        gap: .55rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    .stats-chart-wrap {
+        width: 100%;
+        min-height: 380px;
+        max-height: 520px;
+        position: relative;
+    }
+
+    /* Alerts */
+    .stats-alert {
+        padding: .85rem 1.1rem;
+        border-radius: 8px;
+        font-size: .9rem;
+        margin-bottom: .6rem;
+        font-weight: 500;
+    }
+    .stats-alert--danger {
+        background: var(--color-primary-soft);
+        border: 1px solid #ef9a9a;
+        color: #b71c1c;
+    }
+    .stats-alert--warning {
+        background: #fff8e1;
+        border: 1px solid #ffe082;
+        color: #e65100;
+    }
+    .stats-alert--info {
+        background: #e3f2fd;
+        border: 1px solid #90caf9;
+        color: #0d47a1;
+    }
+
+    /* Campaign progress */
+    .progress-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 1rem;
+    }
+    .progress-card {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        padding: 1rem 1.2rem;
+    }
+    .progress-card__header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: .6rem;
+    }
+    .progress-card__pct {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: var(--color-primary);
+    }
+    .progress-bar-bg {
+        width: 100%;
+        height: 10px;
+        background: #f5f5f5;
+        border-radius: 5px;
+        overflow: hidden;
+        margin-bottom: .6rem;
+    }
+    .progress-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--color-primary), #7b1fa2);
+        border-radius: 5px;
+        transition: width .4s ease;
+        min-width: 2px;
+    }
+    .progress-card__details {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .6rem;
+        font-size: .82rem;
+        color: #616161;
+    }
+
+    /* Chip health */
+    .chip-health-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+    .chip-health-card {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        padding: 1rem 1.2rem;
+        border-left: 4px solid #2e7d32;
+    }
+    .chip-health-card--warning {
+        border-left-color: #f9a825;
+    }
+    .chip-health-card--danger {
+        border-left-color: #c62828;
+        background: #fff5f5;
+    }
+    .chip-health-card__name {
+        font-weight: 700;
+        font-size: 1rem;
+        margin-bottom: .15rem;
+    }
+    .chip-health-card__instance {
+        font-size: .8rem;
+        color: #888;
+        margin-bottom: .6rem;
+    }
+    .chip-health-card__stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: .3rem;
+        font-size: .84rem;
+        color: #424242;
+    }
+    .chip-health-label {
+        font-weight: 600;
+        color: #757575;
+    }
+
+    /* Errors */
+    .error-text {
+        font-size: .8rem;
+        word-break: break-all;
+        background: #f5f5f5;
+        padding: .2rem .4rem;
+        border-radius: 4px;
+        display: inline-block;
+        max-width: 600px;
+    }
+
+    /* Conditional colors */
+    .text-danger { color: #c62828; font-weight: 600; }
+    .text-warning { color: #e65100; font-weight: 600; }
+    .text-success { color: #2e7d32; font-weight: 600; }
+</style>
+{% endblock %}

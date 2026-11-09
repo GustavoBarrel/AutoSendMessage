@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Campanhas - AutoSendMessage{% endblock %}
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Campanhas</h2>
+        <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+            <a href="{% url 'dashboards:home' %}" class="btn-link">← Voltar ao início</a>
+            {% if not show_deleted %}
+            <a href="{% url 'campaigns:campaign_create' %}" class="btn-primary">Nova campanha</a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="section-body">
+
+        {# Tabs: active / finished / archived #}
+        <div style="display:flex;gap:.5rem;margin-bottom:1.25rem;flex-wrap:wrap;">
+            <a href="{% url 'campaigns:campaign_list' %}"
+               class="btn-secondary{% if not show_deleted and not show_finished %} btn-active{% endif %}"
+               style="font-size:.85rem;padding:.3rem .8rem;">
+                Ativas
+            </a>
+            <a href="{% url 'campaigns:campaign_list' %}?finished=1"
+               class="btn-secondary{% if show_finished %} btn-active{% endif %}"
+               style="font-size:.85rem;padding:.3rem .8rem;">
+                Finalizadas {% if finished_count %}({{ finished_count }}){% endif %}
+            </a>
+            <a href="{% url 'campaigns:campaign_list' %}?archived=1"
+               class="btn-secondary{% if show_deleted %} btn-active{% endif %}"
+               style="font-size:.85rem;padding:.3rem .8rem;">
+                Arquivadas {% if deleted_count %}({{ deleted_count }}){% endif %}
+            </a>
+        </div>
+
+        {% if show_deleted %}
+        <p class="form-info" style="margin-bottom:1rem;">
+            Campanhas arquivadas (soft delete). O histórico completo de tentativas e envios está preservado.
+        </p>
+        {% elif show_finished %}
+        <p class="form-info" style="margin-bottom:1rem;">
+            Campanhas finalizadas. O histórico completo de tentativas e envios está preservado.
+        </p>
+        {% endif %}
+
+        {% if campaigns %}
+        <table class="table-perfis">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Público</th>
+                    <th>Status</th>
+                    {% if show_deleted %}<th>Arquivada em</th>{% endif %}
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in campaigns %}
+                <tr{% if show_deleted %} style="opacity:.75;"{% endif %}>
+                    <td>{{ c.name }}</td>
+                    <td>{{ c.audience_short }}</td>
+                    <td>{{ c.get_status_display }}</td>
+                    {% if show_deleted %}
+                    <td style="font-size:.82rem;color:#616161;white-space:nowrap;">
+                        {{ c.deleted_at|date:"d/m/Y H:i" }}
+                    </td>
+                    {% endif %}
+                    <td class="cell-actions">
+                        <a href="{% url 'campaigns:campaign_detail' c.pk %}" class="btn-link">Ver histórico</a>
+                        {% if not show_deleted and not c.activated_at %}
+                        <a href="{% url 'campaigns:campaign_wizard' c.pk 'audience' %}" class="btn-link">Assistente</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        {% if show_deleted %}
+        <p class="text-muted">Nenhuma campanha arquivada.</p>
+        {% elif show_finished %}
+        <p class="text-muted">Nenhuma campanha finalizada.</p>
+        {% else %}
+        <p>Nenhuma campanha. Crie uma para definir chips, mensagens e iniciar o envio.</p>
+        <a href="{% url 'campaigns:campaign_create' %}" class="btn-secondary">Nova campanha</a>
+        {% endif %}
+        {% endif %}
+    </div>
+</section>
+
+<style>
+.btn-active {
+    background: var(--color-primary) !important;
+    color: #fff !important;
+    border-color: transparent !important;
+}
+</style>
+{% endblock %}

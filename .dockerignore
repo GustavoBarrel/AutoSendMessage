@@ -1,0 +1,32 @@
+# Ambiente e segredos
+.venv/
+.venv_ci/
+venv/
+.env
+.env.*
+!.env.example
+
+# Controle de versão e CI
+.git/
+.github/
+.gitignore
+
+# Caches e artefatos locais
+__pycache__/
+*.pyc
+.ruff_cache/
+.coverage
+htmlcov/
+.playwright-mcp/
+*.log
+
+# Dados locais (o banco do container é o Postgres)
+db.sqlite3
+media/
+staticfiles/
+
+# Arquivos que não entram na imagem
+docker-compose*.yml
+Dockerfile
+.dockerignore
+docs/

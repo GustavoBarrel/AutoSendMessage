@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Tags — {{ contact.name }}{% endblock %}
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Tags manuais</h2>
+        <a href="{% url 'contacts:contact_list' %}" class="btn-secondary">Voltar</a>
+    </div>
+    <div class="section-body">
+        <p class="form-info">
+            Contato: <strong>{{ contact.name }}</strong> — <code>{{ contact.mobile_phone }}</code>
+        </p>
+        <form method="post" class="form-perfil">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="id_tag_ids">Tags</label>
+                <div class="tag-picker">
+                    <div class="tag-picker__hint">
+                        Clique para adicionar/remover tags deste contato. As alterações só são aplicadas ao clicar em <strong>Salvar</strong>.
+                    </div>
+                    <div class="tag-pill-grid" id="tag-pill-grid">
+                    {% for t in tags_all %}
+                        <button
+                            type="button"
+                            class="tag-pill {% if t.pk in cur_ids %}tag-pill--active{% endif %}"
+                            data-tag-id="{{ t.pk }}"
+                            aria-pressed="{% if t.pk in cur_ids %}true{% else %}false{% endif %}"
+                        >
+                            {{ t.name }}
+                        </button>
+                    {% endfor %}
+                    </div>
+                    <div id="tag-hidden-inputs">
+                        {% for t in tags_all %}
+                            {% if t.pk in cur_ids %}
+                                <input type="hidden" name="tag_ids" value="{{ t.pk }}" data-tag-id="{{ t.pk }}">
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                <p class="form-info" style="margin-top:.35rem;">
+                    Selecione 1 ou mais tags. Para criar/editar tags, use <strong>Contatos → Tags</strong>.
+                </p>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Salvar</button>
+                <a href="{% url 'contacts:contact_list' %}" class="btn-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</section>
+
+<style>
+.tag-picker{
+    border: 1.5px solid #e3f2fd;
+    background: #f8fbff;
+    border-radius: 12px;
+    padding: .75rem .85rem;
+}
+.tag-picker__hint{
+    font-size: .82rem;
+    color: #616161;
+    margin-bottom: .55rem;
+}
+.tag-pill-grid{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.5rem;
+    margin-top:.2rem;
+}
+.tag-pill{
+    border: 1.5px solid #e0e0e0;
+    border-radius: 999px;
+    background: #fff;
+    padding: .35rem .75rem;
+    font-size: .86rem;
+    font-weight: 800;
+    color: #424242;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+    user-select:none;
+    white-space:nowrap;
+}
+.tag-pill:hover{
+    border-color: #90caf9;
+    background: #f3f7ff;
+}
+.tag-pill:focus{
+    outline:none;
+    box-shadow: 0 0 0 3px rgba(21,101,192,.12);
+}
+.tag-pill--active{
+    border-color: #1565c0;
+    background: #e3f2fd;
+    color: #0d47a1;
+    box-shadow: 0 0 0 3px rgba(21,101,192,.10);
+}
+</style>
+
+<script>
+(function () {
+    var grid = document.getElementById('tag-pill-grid');
+    var hiddenWrap = document.getElementById('tag-hidden-inputs');
+    if (!grid || !hiddenWrap) return;
+
+    function hasHidden(tagId) {
+        return !!hiddenWrap.querySelector('input[type="hidden"][data-tag-id="' + tagId + '"]');
+    }
+
+    function addHidden(tagId) {
+        if (hasHidden(tagId)) return;
+        var inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'tag_ids';
+        inp.value = String(tagId);
+        inp.setAttribute('data-tag-id', String(tagId));
+        hiddenWrap.appendChild(inp);
+    }
+
+    function removeHidden(tagId) {
+        var el = hiddenWrap.querySelector('input[type="hidden"][data-tag-id="' + tagId + '"]');
+        if (el) el.remove();
+    }
+
+    grid.addEventListener('click', function (e) {
+        var btn = e.target;
+        while (btn && btn !== grid && !(btn.tagName === 'BUTTON' && btn.classList.contains('tag-pill'))) {
+            btn = btn.parentElement;
+        }
+        if (!btn || btn === grid) return;
+        var tagId = btn.getAttribute('data-tag-id');
+        if (!tagId) return;
+
+        var active = btn.classList.toggle('tag-pill--active');
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        if (active) addHidden(tagId);
+        else removeHidden(tagId);
+    });
+})();
+</script>
+{% endblock %}
+

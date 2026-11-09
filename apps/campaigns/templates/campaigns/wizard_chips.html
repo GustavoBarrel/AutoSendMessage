@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Chips — {{ campaign.name }}{% endblock %}
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">{{ campaign.name }}</h2>
+        <div class="section-actions">
+            <a href="{% url 'campaigns:campaign_list' %}" class="btn-link">Campanhas</a>
+            <a href="{% url 'campaigns:campaign_detail' campaign.pk %}" class="btn-secondary">Painel</a>
+        </div>
+    </div>
+    <div class="section-body">
+        {% include "campaigns/wizard_steps.html" with wizard_step=wizard_step %}
+
+        <div class="campaign-panel-block">
+            <p class="form-info">Selecione quais chips farão o envio. É obrigatório <strong>ao menos um</strong>. Um chip não pode estar em duas campanhas ativas ao mesmo tempo.</p>
+            <form method="post" class="form-perfil">
+                {% csrf_token %}
+                <div class="chip-form-block" style="border:none;padding:0;margin:0;">
+                    <h3 class="chip-form-block-title">Chips disponíveis</h3>
+                    {% for row in chips_with_state %}
+                    {% with chip=row.chip state=row.state ok=row.is_connected %}
+                    <label class="checkbox-label chip-pick {% if not ok %}chip-pick--disabled{% endif %}">
+                        <input
+                            type="checkbox"
+                            name="chip_ids"
+                            value="{{ chip.pk }}"
+                            {% if chip.pk in chips_sel %}checked{% endif %}
+                            {% if not ok %}disabled{% endif %}
+                        >
+                        <span class="chip-pick__main">
+                            <span class="chip-pick__name">
+                                {{ chip.name }}
+                                {% if chip.provider == 'meta' %}<span class="chip-provider-badge chip-provider-badge--meta">Meta</span>{% endif %}
+                            </span>
+                            {% if chip.provider == 'meta' %}
+                            <span class="chip-pill chip-pill--ok">Meta API</span>
+                            {% elif chip.provider == 'simulated' %}
+                            <code class="chip-pick__inst">{{ chip.instance_name }}</code>
+                            <span class="chip-pill chip-pill--ok" title="Provedor simulado: nada é enviado de verdade">Simulado</span>
+                            {% else %}
+                            <code class="chip-pick__inst">{{ chip.instance_name }}</code>
+                            {% if evolution_ok %}
+                                {% if state == "open" %}
+                                    <span class="chip-pill chip-pill--ok">Conectado</span>
+                                {% elif state == "close" %}
+                                    <span class="chip-pill chip-pill--bad">Desconectado</span>
+                                {% else %}
+                                    <span class="chip-pill chip-pill--muted">Sem status</span>
+                                {% endif %}
+                            {% endif %}
+                            {% endif %}
+                        </span>
+                        {% if chip.provider != 'meta' and chip.provider != 'simulated' and evolution_ok and state != "open" %}
+                            <a href="{% url 'chips:chip_connect' chip.pk %}" class="btn-secondary btn-secondary--sm chip-pick__action">Conectar (QR)</a>
+                        {% endif %}
+                    </label>
+                    {% endwith %}
+                    {% empty %}
+                    <p>Nenhum chip disponível. <a href="{% url 'chips:chip_create' %}">Cadastre um chip</a>.</p>
+                    {% endfor %}
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Salvar e continuar para mensagens</button>
+                    <a href="{% url 'campaigns:campaign_wizard' campaign.pk 'audience' %}" class="btn-secondary">← Voltar: público</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+{% endblock %}

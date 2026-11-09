@@ -1,0 +1,902 @@
+{% extends "base.html" %}
+{% block title %}Público — {{ campaign.name }}{% endblock %}
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">{{ campaign.name }}</h2>
+        <div class="section-actions">
+            <a href="{% url 'campaigns:campaign_list' %}" class="btn-link">Campanhas</a>
+            <a href="{% url 'campaigns:campaign_detail' campaign.pk %}" class="btn-secondary">Painel</a>
+        </div>
+    </div>
+    <div class="section-body">
+        {% include "campaigns/wizard_steps.html" with wizard_step=wizard_step %}
+
+        <div class="alert alert-info campaign-wizard-alert">
+            <strong>Rascunho:</strong> nada é enviado até você iniciar o envio no painel. Use <strong>Aplicar filtros</strong> para salvar critérios e atualizar a lista; só avance para chips quando estiver satisfeito com o público.
+        </div>
+
+        <div class="campaign-wizard-summary">
+            <div class="campaign-wizard-summary-card">
+                <div class="campaign-wizard-summary-label">Destinatários (campanha)</div>
+                <div class="campaign-wizard-summary-value">{{ recipients_total }}</div>
+            </div>
+            <div class="campaign-wizard-summary-card campaign-wizard-summary-card--wide">
+                <div class="campaign-wizard-summary-label">Critérios ativos</div>
+                <div class="campaign-wizard-summary-text">{{ audience_summary }}</div>
+            </div>
+        </div>
+
+        <div class="campaign-panel-block">
+            <h3 class="chip-form-block-title">1. Base e filtros por coluna do contato</h3>
+            <p class="form-info">Cada lista mostra só valores que já existem em algum contato — a escolha bate exatamente com o cadastro (acentos e grafia corretos). Deixe em <strong>— Qualquer</strong> para não filtrar por aquele campo. Vários filtros preenchidos são combinados (E).</p>
+            <form method="post" class="form-perfil">
+                {% csrf_token %}
+                <input type="hidden" name="retain_q" value="{{ preview_q }}">
+                <div class="form-group">
+                    <label for="id_base">Base</label>
+                    <select name="base" id="id_base" class="form-control">
+                        <option value="all" {% if cfg.base == 'all' %}selected{% endif %}>Todos os contatos</option>
+                        <option value="manual" {% if cfg.base == 'manual' %}selected{% endif %}>Somente incluídos manualmente</option>
+                        <option value="birthday_today" {% if cfg.base == 'birthday_today' %}selected{% endif %}>Só aniversariantes do dia</option>
+                    </select>
+                </div>
+                <div id="birthday-date-group" style="display:none;margin-top:.25rem;">
+                    <div class="birthday-date-card">
+                        <div class="birthday-date-card__head">
+                            <div class="birthday-date-card__title">Data do aniversário</div>
+                            <div class="birthday-date-card__subtitle">Escolha o dia/mês para filtrar aniversariantes.</div>
+                        </div>
+                        <div class="birthday-date-card__body">
+                            <div class="birthday-date-row">
+                                <label for="id_birthday_date" class="birthday-date-label">Data</label>
+                                <input
+                                    type="date"
+                                    name="birthday_date"
+                                    id="id_birthday_date"
+                                    class="form-control birthday-date-input"
+                                    value="{{ cfg.birthday_date }}"
+                                >
+                            </div>
+                            <div class="birthday-date-hint">
+                                <strong>Obs.:</strong> o sistema <strong>ignora o ano</strong> e usa apenas <strong>dia e mês</strong>.
+                                Você pode escolher qualquer ano no calendário (ex.: <code>01/01/2027</code>) que o filtro continuará sendo “<strong>01/01</strong>”.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="campaign-filters-grid">
+                    <div class="form-group">
+                        <label for="id_city">Cidade</label>
+                        <select name="city" id="id_city" class="form-control">
+                            <option value="">— Qualquer cidade</option>
+                            {% for v in filter_opts.city %}
+                            <option value="{{ v }}" {% if cfg.city == v %}selected{% endif %}>{{ v }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="id_state">UF</label>
+                        <select name="state" id="id_state" class="form-control">
+                            <option value="">— Qualquer UF</option>
+                            {% for v in filter_opts.state %}
+                            <option value="{{ v }}" {% if cfg.state == v %}selected{% endif %}>{{ v }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="id_neighborhood">Bairro</label>
+                        <select name="neighborhood" id="id_neighborhood" class="form-control">
+                            <option value="">— Qualquer bairro</option>
+                            {% for v in filter_opts.neighborhood %}
+                            <option value="{{ v }}" {% if cfg.neighborhood == v %}selected{% endif %}>{{ v }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="id_category">Categoria</label>
+                        <select name="category" id="id_category" class="form-control">
+                            <option value="">— Qualquer categoria</option>
+                            {% for v in filter_opts.category %}
+                            <option value="{{ v }}" {% if cfg.category == v %}selected{% endif %}>{{ v }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="id_subcategory">Subcategoria</label>
+                        <select name="subcategory" id="id_subcategory" class="form-control">
+                            <option value="">— Qualquer subcategoria</option>
+                            {% for v in filter_opts.subcategory %}
+                            <option value="{{ v }}" {% if cfg.subcategory == v %}selected{% endif %}>{{ v }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>Tags manuais (opcional)</label>
+                        <div class="tag-picker">
+                            <div class="tag-picker__hint">
+                                Selecione tags para filtrar o público. Você pode exigir que o contato <strong>tenha</strong> tags e/ou <strong>não tenha</strong> tags.
+                            </div>
+                            <div class="tag-picker-split">
+                                <div class="tag-picker-box">
+                                    <div class="tag-picker-box__title">Deve ter</div>
+                                    <div class="tag-mode">
+                                        <label class="tag-mode__opt">
+                                            <input type="radio" name="manual_tag_include_mode" value="any"
+                                                   {% if cfg.manual_tag_include_mode != 'all' %}checked{% endif %}>
+                                            Qualquer uma
+                                        </label>
+                                        <label class="tag-mode__opt">
+                                            <input type="radio" name="manual_tag_include_mode" value="all"
+                                                   {% if cfg.manual_tag_include_mode == 'all' %}checked{% endif %}>
+                                            Todas
+                                        </label>
+                                    </div>
+                                    <div class="tag-pill-grid" id="manual-tag-include-grid">
+                                        {% for t in manual_tags %}
+                                            <button
+                                                type="button"
+                                                class="tag-pill {% if t.pk in cfg.manual_tag_include_ids %}tag-pill--active{% endif %}"
+                                                data-tag-id="{{ t.pk }}"
+                                                aria-pressed="{% if t.pk in cfg.manual_tag_include_ids %}true{% else %}false{% endif %}"
+                                            >
+                                                {{ t.name }}
+                                            </button>
+                                        {% endfor %}
+                                    </div>
+                                    <div id="manual-tag-include-hidden">
+                                        {% for t in manual_tags %}
+                                            {% if t.pk in cfg.manual_tag_include_ids %}
+                                                <input type="hidden" name="manual_tag_include_ids" value="{{ t.pk }}" data-tag-id="{{ t.pk }}">
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                </div>
+
+                                <div class="tag-picker-box">
+                                    <div class="tag-picker-box__title">Não pode ter</div>
+                                    <div class="tag-pill-grid" id="manual-tag-exclude-grid">
+                                        {% for t in manual_tags %}
+                                            <button
+                                                type="button"
+                                                class="tag-pill {% if t.pk in cfg.manual_tag_exclude_ids %}tag-pill--active{% endif %}"
+                                                data-tag-id="{{ t.pk }}"
+                                                aria-pressed="{% if t.pk in cfg.manual_tag_exclude_ids %}true{% else %}false{% endif %}"
+                                            >
+                                                {{ t.name }}
+                                            </button>
+                                        {% endfor %}
+                                    </div>
+                                    <div id="manual-tag-exclude-hidden">
+                                        {% for t in manual_tags %}
+                                            {% if t.pk in cfg.manual_tag_exclude_ids %}
+                                                <input type="hidden" name="manual_tag_exclude_ids" value="{{ t.pk }}" data-tag-id="{{ t.pk }}">
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="form-info" style="margin-top:.35rem;">
+                            Para criar/editar tags, use <strong>Contatos → Tags</strong>.
+                        </p>
+                    </div>
+                </div>
+                <label class="checkbox-label">
+                    <input type="checkbox" name="whatsapp_only" {% if cfg.whatsapp_only %}checked{% endif %}>
+                    Somente contatos com WhatsApp marcado
+                </label>
+                <div class="form-actions" style="margin-top:1rem;">
+                    <button type="submit" name="action" value="apply_filters" class="btn-secondary">Aplicar filtros e atualizar lista</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="campaign-panel-block">
+            <h3 class="chip-form-block-title">2. Incluir contato por celular</h3>
+            <p class="form-info">
+                Inclui alguém mesmo que não caiba nos filtros acima (força envio). Para campanha só com pessoas específicas,
+                escolha a base <strong>“Somente incluídos manualmente”</strong>.
+            </p>
+            <form method="post" class="form-perfil campaign-inline-form" id="form-include-dynamic">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_include_by_id">
+                <input type="hidden" name="retain_q" value="{{ preview_q }}">
+                <div class="form-group campaign-inline-field">
+                    <label for="id_include_search">Buscar contato</label>
+                    <div class="include-search">
+                        <span class="include-search__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="18" height="18" focusable="false" aria-hidden="true">
+                                <path d="M10.5 3a7.5 7.5 0 1 0 4.55 13.45l3.5 3.5a1 1 0 0 0 1.41-1.41l-3.5-3.5A7.5 7.5 0 0 0 10.5 3Zm0 2a5.5 5.5 0 1 1 0 11a5.5 5.5 0 0 1 0-11Z" />
+                            </svg>
+                        </span>
+                        <input type="search" id="id_include_search" class="include-search__input" placeholder="Digite nome ou celular" autocomplete="off">
+                    </div>
+                    <input type="hidden" name="include_id" id="id_include_id">
+                    <div class="include-suggest" id="include-suggest" style="display:none;"></div>
+                </div>
+                <button type="submit" class="btn-secondary" id="btn-include" disabled>Incluir</button>
+            </form>
+            {% if included %}
+            <div class="campaign-included-list">
+                <p class="form-info" style="margin-bottom:0.5rem;">Incluídos manualmente:</p>
+                <ul class="campaign-tag-list">
+                    {% for c in included %}
+                    <li>
+                        <span>{{ c.name }} — {{ c.mobile_phone }}</span>
+                        <form method="post" class="campaign-inline-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="remove_include">
+                            <input type="hidden" name="remove_include_id" value="{{ c.pk }}">
+                            <input type="hidden" name="retain_q" value="{{ preview_q }}">
+                            <button type="submit" class="include-remove-btn">Remover</button>
+                        </form>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if excluded_contacts %}
+        <div class="campaign-panel-block">
+            <h3 class="chip-form-block-title">Excluídos desta campanha</h3>
+            <p class="form-info">Não receberão a mensagem enquanto estiverem aqui. Você pode restaurar.</p>
+            <table class="table-perfis">
+                <thead><tr><th>Nome</th><th>Celular</th><th></th></tr></thead>
+                <tbody>
+                    {% for c in excluded_contacts %}
+                    <tr>
+                        <td>{{ c.name }}</td>
+                        <td>{{ c.mobile_phone }}</td>
+                        <td>
+                            <form method="post" class="campaign-inline-form">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="remove_exclude">
+                                <input type="hidden" name="pk" value="{{ c.pk }}">
+                                <input type="hidden" name="retain_q" value="{{ preview_q }}">
+                                <button type="submit" class="btn-secondary" style="padding:.2rem .65rem;font-size:.8rem;">↩ Restaurar</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <div class="campaign-panel-block">
+            <h3 class="chip-form-block-title">3. Quem receberá a mensagem (pré-visualização)</h3>
+            <p class="form-info">Lista paginada dos destinatários com os critérios atuais. A busca abaixo só filtra <em>esta tabela</em> para você achar alguém; não altera o público da campanha.</p>
+            <form method="get" class="campaign-preview-search-form" action="{% url 'campaigns:campaign_wizard' campaign.pk 'audience' %}" role="search">
+                <label for="id_q" class="campaign-preview-search-label">Buscar na lista de destinatários</label>
+                <div class="campaign-preview-search-row">
+                    <div class="search-input campaign-preview-search-input">
+                        <span class="search-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="18" height="18" focusable="false" aria-hidden="true">
+                                <path d="M10.5 3a7.5 7.5 0 1 0 4.55 13.45l3.5 3.5a1 1 0 0 0 1.41-1.41l-3.5-3.5A7.5 7.5 0 0 0 10.5 3Zm0 2a5.5 5.5 0 1 1 0 11a5.5 5.5 0 0 1 0-11Z" />
+                            </svg>
+                        </span>
+                        <input type="search" name="q" id="id_q" class="input-search" value="{{ preview_q }}" placeholder="Nome, parte do nome ou celular (DDD + número)" autocomplete="off" enterkeyhint="search" inputmode="search">
+                        {% if preview_q %}
+                        <a href="{% url 'campaigns:campaign_wizard' campaign.pk 'audience' %}" class="search-clear search-clear--link" title="Limpar busca" aria-label="Limpar busca">×</a>
+                        {% endif %}
+                    </div>
+                    <button type="submit" class="btn-primary campaign-preview-search-submit">Buscar</button>
+                </div>
+            </form>
+            {% if preview_q %}
+            <p class="form-info">Mostrando <strong>{{ total }}</strong> resultado(s) com “{{ preview_q }}” na pré-visualização (total da campanha: {{ recipients_total }}).</p>
+            {% endif %}
+            {% if page_obj.object_list %}
+            <div class="table-wrap">
+            <form method="post" id="form-exclude-bulk" class="campaign-inline-form" style="margin-bottom:.6rem;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_exclude_bulk">
+                <input type="hidden" name="retain_q" value="{{ preview_q }}">
+                <button type="submit" class="btn-danger-outline" style="padding:.25rem .7rem;font-size:.82rem;">
+                    Excluir selecionados
+                </button>
+                <span class="text-muted" id="exclude-selected-count" style="font-size:.82rem;margin-left:.5rem;"></span>
+            </form>
+            <table class="table-perfis campaign-preview-table">
+                <thead>
+                    <tr>
+                        <th style="width:32px;">
+                            <input type="checkbox" id="chk-all" title="Selecionar todos">
+                        </th>
+                        <th>Nome</th>
+                        <th>Celular</th>
+                        <th>Cidade</th>
+                        <th>Bairro</th>
+                        <th>UF</th>
+                        <th>Categoria</th>
+                        <th>WA</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in page_obj %}
+                    <tr>
+                        <td>
+                            <input type="checkbox" form="form-exclude-bulk" name="exclude_ids" value="{{ c.pk }}" class="chk-one">
+                        </td>
+                        <td>{{ c.name }}</td>
+                        <td>{{ c.mobile_phone }}</td>
+                        <td>{{ c.city|default:"—" }}</td>
+                        <td>{{ c.neighborhood|default:"—" }}</td>
+                        <td>{{ c.state|default:"—" }}</td>
+                        <td>{{ c.category|default:"—" }}</td>
+                        <td>{% if c.has_whatsapp %}Sim{% else %}—{% endif %}</td>
+                        <td>
+                            <form method="post" class="campaign-inline-form" id="form-exclude-{{ c.pk }}">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="add_exclude">
+                                <input type="hidden" name="pk" value="{{ c.pk }}">
+                                <input type="hidden" name="retain_q" value="{{ preview_q }}">
+                                <button type="button"
+                                    class="btn-danger-outline"
+                                    style="padding:.2rem .6rem;font-size:.78rem;"
+                                    onclick="openExcludeModal('{{ c.pk }}', '{{ c.name|escapejs }}')">
+                                    Excluir
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            <div class="pagination campaign-pagination">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if preview_q %}&q={{ preview_q|urlencode }}{% endif %}" class="btn-link">Anterior</a>
+                {% endif %}
+                <span class="text-muted">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if preview_q %}&q={{ preview_q|urlencode }}{% endif %}" class="btn-link">Próxima</a>
+                {% endif %}
+            </div>
+            {% else %}
+            <p class="text-muted">{% if preview_q %}Nenhum resultado para esta busca.{% else %}Nenhum destinatário com os filtros atuais. Ajuste os critérios, aplique filtros ou inclua alguém pelo celular.{% endif %}</p>
+            {% endif %}
+        </div>
+
+        <div class="form-actions" style="margin-top:1.5rem;">
+            <a href="{% url 'campaigns:campaign_wizard' campaign.pk 'chips' %}" class="btn-primary">Ir para chips (passo 2)</a>
+            <a href="{% url 'campaigns:campaign_detail' campaign.pk %}" class="btn-secondary">Painel</a>
+            {% if campaign.status == 'draft' %}
+            <a href="{% url 'campaigns:campaign_confirm_delete' campaign.pk %}" class="btn-danger-outline">Excluir rascunho</a>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+{# ── Modal: confirm excluding a contact from the audience ── #}
+<div id="exclude-modal-backdrop" class="ex-modal-backdrop" style="display:none;" onclick="closeExcludeModal()">
+    <div class="ex-modal" onclick="event.stopPropagation()">
+        <div class="ex-modal-icon">⚠️</div>
+        <h3 class="ex-modal-title">Excluir do público?</h3>
+        <p class="ex-modal-body">
+            O contato <strong id="ex-modal-name"></strong> não receberá a mensagem desta campanha.
+            <br><span style="font-size:.85rem;color:#757575;">Você pode restaurá-lo depois na seção "Excluídos".</span>
+        </p>
+        <div class="ex-modal-actions">
+            <button class="btn-danger-outline" id="ex-modal-confirm">Sim, excluir do público</button>
+            <button class="btn-secondary" onclick="closeExcludeModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.ex-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeInBackdrop .15s ease;
+}
+@keyframes fadeInBackdrop { from { opacity:0 } to { opacity:1 } }
+.ex-modal {
+    background: #fff;
+    border-radius: 14px;
+    padding: 2rem 2rem 1.5rem;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0,0,0,.18);
+    text-align: center;
+    animation: slideUp .18s ease;
+}
+@keyframes slideUp { from { transform: translateY(16px); opacity:0 } to { transform: translateY(0); opacity:1 } }
+.ex-modal-icon { font-size: 2.2rem; margin-bottom: .5rem; }
+.ex-modal-title { font-size: 1.1rem; font-weight: 700; margin: 0 0 .75rem; }
+.ex-modal-body { font-size: .92rem; color: #424242; margin-bottom: 1.5rem; line-height: 1.55; }
+.ex-modal-actions { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; }
+
+.birthday-date-card {
+    border: 1.5px solid #e3f2fd;
+    background: #f8fbff;
+    border-radius: 12px;
+    padding: .9rem 1rem;
+}
+.birthday-date-card__head {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    margin-bottom: .7rem;
+}
+.birthday-date-card__title {
+    font-weight: 700;
+    font-size: .92rem;
+    color: #1a237e;
+}
+.birthday-date-card__subtitle {
+    font-size: .82rem;
+    color: #616161;
+    line-height: 1.4;
+}
+.birthday-date-row {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    flex-wrap: wrap;
+}
+.birthday-date-label {
+    font-weight: 600;
+    font-size: .85rem;
+    color: #424242;
+    min-width: 52px;
+}
+.birthday-date-input {
+    max-width: 240px;
+    height: 44px;
+    padding: .55rem .85rem;
+    border-radius: 12px;
+    border: 2px solid #e0e0e0;
+    background: linear-gradient(180deg, #ffffff 0%, #fbfbfb 100%);
+    font-size: .92rem;
+    font-weight: 600;
+    color: #212121;
+    box-shadow: 0 1px 0 rgba(0,0,0,.02);
+    transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.birthday-date-input:focus {
+    border-color: var(--color-primary);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), .12);
+    outline: none;
+}
+
+/* Date input tweaks (Chrome/Edge) */
+.birthday-date-input::-webkit-datetime-edit {
+    padding: 0;
+}
+.birthday-date-input::-webkit-datetime-edit-fields-wrapper {
+    padding: 0;
+}
+.birthday-date-input::-webkit-calendar-picker-indicator {
+    opacity: 1;
+    cursor: pointer;
+    padding: .25rem;
+    border-radius: 10px;
+    background: #e3f2fd;
+}
+.birthday-date-input::-webkit-calendar-picker-indicator:hover {
+    background: #bbdefb;
+}
+.birthday-date-input::-webkit-calendar-picker-indicator:active {
+    background: #90caf9;
+}
+
+/* Firefox */
+.birthday-date-input {
+    accent-color: var(--color-primary);
+}
+.birthday-date-hint {
+    margin-top: .55rem;
+    font-size: .8rem;
+    color: #616161;
+    line-height: 1.5;
+}
+.birthday-date-hint code {
+    background: #e3f2fd;
+    color: #0d47a1;
+    padding: .1rem .35rem;
+    border-radius: 6px;
+    font-size: .78rem;
+}
+
+.include-suggest {
+    margin-top: .55rem;
+    border: 1.5px solid #e3f2fd;
+    border-radius: 12px;
+    background: #fff;
+    overflow: hidden;
+    max-width: 560px;
+    box-shadow: 0 10px 24px rgba(0,0,0,.08);
+}
+.include-suggest .item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .65rem .85rem;
+    border-top: 1px solid #eef5ff;
+    cursor: pointer;
+}
+.include-suggest .item:first-child { border-top: 0; }
+.include-suggest .item:hover { background: #f3f7ff; }
+.include-suggest .left {
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+}
+.include-suggest .nome { font-weight: 700; font-size: .9rem; color: #212121; }
+.include-suggest .cel { font-size: .82rem; color: #616161; white-space: nowrap; }
+.include-suggest .hint { font-size: .78rem; color: #1565c0; font-weight: 600; white-space: nowrap; }
+
+.include-search {
+    position: relative;
+    max-width: 560px;
+}
+.include-search__icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #757575;
+    pointer-events: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.include-search__input {
+    width: 100%;
+    height: 46px;
+    border-radius: 12px;
+    border: 2px solid #e0e0e0;
+    padding: .55rem .9rem .55rem 2.35rem;
+    background: linear-gradient(180deg, #ffffff 0%, #fbfbfb 100%);
+    font-size: .92rem;
+    font-weight: 600;
+    color: #212121;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+    outline: none;
+}
+.include-search__input:focus {
+    border-color: var(--color-primary);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), .12);
+}
+.include-search__input::placeholder {
+    color: #9e9e9e;
+    font-weight: 500;
+}
+
+.include-remove-btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:.35rem;
+    padding:.22rem .65rem;
+    border-radius: 999px;
+    border: 1.5px solid #c62828;
+    background: #fff;
+    color: #c62828;
+    font-size: .78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+}
+.include-remove-btn:hover{
+    background:#c62828;
+    color:#fff;
+}
+
+.tag-picker{
+    border: 1.5px solid #e3f2fd;
+    background: #f8fbff;
+    border-radius: 12px;
+    padding: .75rem .85rem;
+}
+.tag-picker__hint{
+    font-size: .82rem;
+    color: #616161;
+    margin-bottom: .55rem;
+    line-height: 1.45;
+}
+.tag-pill-grid{
+    display:flex;
+    flex-wrap:wrap;
+    align-content:flex-start;
+    gap:.5rem;
+    margin-top:.2rem;
+    max-height:6.5rem;
+    overflow-y:auto;
+    overflow-x:hidden;
+    padding-right:.2rem;
+}
+.tag-pill{
+    border: 1.5px solid #e0e0e0;
+    border-radius: 999px;
+    background: #fff;
+    padding: .35rem .75rem;
+    font-size: .86rem;
+    font-weight: 800;
+    color: #424242;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+    user-select:none;
+    white-space:nowrap;
+}
+.tag-pill:hover{
+    border-color: #90caf9;
+    background: #f3f7ff;
+}
+.tag-pill:focus{
+    outline:none;
+    box-shadow: 0 0 0 3px rgba(21,101,192,.12);
+}
+.tag-pill--active{
+    border-color: #1565c0;
+    background: #e3f2fd;
+    color: #0d47a1;
+    box-shadow: 0 0 0 3px rgba(21,101,192,.10);
+}
+.tag-picker-split{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .9rem;
+}
+@media (max-width: 900px){
+    .tag-picker-split{ grid-template-columns: 1fr; }
+}
+.tag-picker-box{
+    background:#fff;
+    border:1.5px solid #e0e0e0;
+    border-radius: 12px;
+    padding: .7rem .75rem;
+}
+.tag-picker-box__title{
+    font-weight: 800;
+    color:#212121;
+    font-size: .86rem;
+    margin-bottom: .45rem;
+}
+.tag-mode{
+    display:flex;
+    gap:.6rem;
+    flex-wrap:wrap;
+    margin-bottom: .55rem;
+}
+.tag-mode__opt{
+    display:inline-flex;
+    align-items:center;
+    gap:.35rem;
+    font-size:.82rem;
+    color:#424242;
+    font-weight: 700;
+}
+.tag-mode__opt input{ accent-color:#1565c0; }
+</style>
+
+<script>
+var _pendingFormId = null;
+
+function openExcludeModal(pk, name) {
+    _pendingFormId = 'form-exclude-' + pk;
+    document.getElementById('ex-modal-name').textContent = name;
+    document.getElementById('ex-modal-confirm').onclick = function () {
+        if (_pendingFormId) document.getElementById(_pendingFormId).submit();
+    };
+    var backdrop = document.getElementById('exclude-modal-backdrop');
+    backdrop.style.display = 'flex';
+}
+
+function closeExcludeModal() {
+    document.getElementById('exclude-modal-backdrop').style.display = 'none';
+    _pendingFormId = null;
+}
+
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeExcludeModal();
+});
+</script>
+
+<script>
+(function () {
+    function bindTagGrid(gridId, hiddenId, inputName, onSelected) {
+        var grid = document.getElementById(gridId);
+        var hiddenWrap = document.getElementById(hiddenId);
+        if (!grid || !hiddenWrap) return;
+
+        function hasHidden(tagId) {
+            return !!hiddenWrap.querySelector('input[type="hidden"][data-tag-id="' + tagId + '"]');
+        }
+        function addHidden(tagId) {
+            if (hasHidden(tagId)) return;
+            var inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = inputName;
+            inp.value = String(tagId);
+            inp.setAttribute('data-tag-id', String(tagId));
+            hiddenWrap.appendChild(inp);
+        }
+        function removeHidden(tagId) {
+            var el = hiddenWrap.querySelector('input[type="hidden"][data-tag-id="' + tagId + '"]');
+            if (el) el.remove();
+        }
+
+        grid.addEventListener('click', function (e) {
+            var btn = e.target;
+            while (btn && btn !== grid && !(btn.tagName === 'BUTTON' && btn.classList.contains('tag-pill'))) {
+                btn = btn.parentElement;
+            }
+            if (!btn || btn === grid) return;
+            var tagId = btn.getAttribute('data-tag-id');
+            if (!tagId) return;
+            var active = btn.classList.toggle('tag-pill--active');
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+            if (active) {
+                addHidden(tagId);
+                if (typeof onSelected === 'function') onSelected(tagId);
+            }
+            else removeHidden(tagId);
+        });
+    }
+
+    function forceUnselect(gridId, hiddenId, tagId) {
+        var grid = document.getElementById(gridId);
+        var hiddenWrap = document.getElementById(hiddenId);
+        if (!grid || !hiddenWrap) return;
+        var btn = grid.querySelector('button.tag-pill[data-tag-id="' + tagId + '"]');
+        if (btn && btn.classList.contains('tag-pill--active')) {
+            btn.classList.remove('tag-pill--active');
+            btn.setAttribute('aria-pressed', 'false');
+        }
+        var el = hiddenWrap.querySelector('input[type="hidden"][data-tag-id="' + tagId + '"]');
+        if (el) el.remove();
+    }
+
+    bindTagGrid(
+        'manual-tag-include-grid',
+        'manual-tag-include-hidden',
+        'manual_tag_include_ids',
+        function (tagId) { forceUnselect('manual-tag-exclude-grid', 'manual-tag-exclude-hidden', tagId); }
+    );
+    bindTagGrid(
+        'manual-tag-exclude-grid',
+        'manual-tag-exclude-hidden',
+        'manual_tag_exclude_ids',
+        function (tagId) { forceUnselect('manual-tag-include-grid', 'manual-tag-include-hidden', tagId); }
+    );
+})();
+</script>
+
+<script>
+function toggleBirthdayDate() {
+    var base = document.getElementById('id_base');
+    var group = document.getElementById('birthday-date-group');
+    if (!base || !group) return;
+    group.style.display = (base.value === 'birthday_today') ? 'block' : 'none';
+}
+document.addEventListener('DOMContentLoaded', function () {
+    var base = document.getElementById('id_base');
+    if (base) base.addEventListener('change', toggleBirthdayDate);
+    toggleBirthdayDate();
+});
+</script>
+
+<script>
+(function () {
+    var input = document.getElementById('id_include_search');
+    var box = document.getElementById('include-suggest');
+    var hid = document.getElementById('id_include_id');
+    var btn = document.getElementById('btn-include');
+    var timer = null;
+
+    function clearSelection() {
+        hid.value = '';
+        if (btn) btn.disabled = true;
+    }
+
+    function setSelection(item) {
+        hid.value = String(item.id);
+        input.value = item.name + ' — ' + item.mobile_phone;
+        if (btn) btn.disabled = false;
+        box.style.display = 'none';
+    }
+
+    function renderResults(results) {
+        if (!results || !results.length) {
+            box.style.display = 'none';
+            return;
+        }
+        // Contact names come from imported spreadsheets: build nodes with textContent/dataset
+        // so the data is never parsed as HTML.
+        box.textContent = '';
+        results.forEach(function (r) {
+            function div(className, text) {
+                var el = document.createElement('div');
+                el.className = className;
+                if (text !== undefined) el.textContent = text;
+                return el;
+            }
+            var item = div('item');
+            item.dataset.id = String(r.id);
+            item.dataset.name = r.name || '';
+            item.dataset.phone = r.mobile_phone || '';
+            var left = div('left');
+            left.appendChild(div('nome', r.name || ''));
+            left.appendChild(div('cel', r.mobile_phone || ''));
+            item.appendChild(left);
+            item.appendChild(div('hint', 'Selecionar'));
+            box.appendChild(item);
+        });
+        box.style.display = 'block';
+    }
+
+    function fetchResults(q) {
+        var url = "{% url 'campaigns:campaign_audience_search_contact' campaign.pk %}" + "?q=" + encodeURIComponent(q);
+        fetch(url, { headers: { "X-Requested-With": "fetch" } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) { renderResults((data && data.results) || []); })
+            .catch(function () { box.style.display = 'none'; });
+    }
+
+    if (input) {
+        input.addEventListener('input', function () {
+            clearSelection();
+            var q = (input.value || '').trim();
+            if (timer) window.clearTimeout(timer);
+            if (q.length < 2) { box.style.display = 'none'; return; }
+            timer = window.setTimeout(function () { fetchResults(q); }, 180);
+        });
+    }
+    if (box) {
+        box.addEventListener('click', function (e) {
+            var el = e.target;
+            while (el && el !== box && !el.classList.contains('item')) el = el.parentElement;
+            if (!el || el === box) return;
+            setSelection({
+                id: el.getAttribute('data-id'),
+                name: el.getAttribute('data-name'),
+                mobile_phone: el.getAttribute('data-phone'),
+            });
+        });
+    }
+})();
+</script>
+
+<script>
+(function () {
+    var all = document.getElementById('chk-all');
+    var ones = Array.prototype.slice.call(document.querySelectorAll('.chk-one'));
+    var label = document.getElementById('exclude-selected-count');
+
+    function updateCount() {
+        if (!label) return;
+        var n = ones.filter(function (c) { return c.checked; }).length;
+        label.textContent = n ? (n + " selecionado(s)") : "";
+    }
+
+    if (all) {
+        all.addEventListener('change', function () {
+            ones.forEach(function (c) { c.checked = all.checked; });
+            updateCount();
+        });
+    }
+    ones.forEach(function (c) {
+        c.addEventListener('change', function () {
+            if (all) {
+                all.checked = ones.length && ones.every(function (x) { return x.checked; });
+            }
+            updateCount();
+        });
+    });
+    updateCount();
+})();
+</script>
+{% endblock %}

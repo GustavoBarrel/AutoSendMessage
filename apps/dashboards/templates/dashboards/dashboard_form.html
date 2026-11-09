@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{% if editing %}Editar painel{% else %}Novo painel{% endif %} - AutoSendMessage{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">{% if editing %}Editar painel{% else %}Novo painel{% endif %}</h2>
+    </div>
+    <div class="section-body">
+        <form method="post" class="form-default">
+            {% csrf_token %}
+            {% for field in form %}
+            <div class="form-field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<small class="form-help">{{ field.help_text }}</small>{% endif %}
+                {% for error in field.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+            </div>
+            {% endfor %}
+            <div style="display:flex;gap:.75rem;margin-top:1.2rem;">
+                <button type="submit" class="btn-primary">{% if editing %}Salvar{% else %}Criar painel{% endif %}</button>
+                {% if editing %}
+                <a href="{% url 'dashboards:custom_dashboard_view' dashboard.pk %}" class="btn-secondary">Cancelar</a>
+                {% else %}
+                <a href="{% url 'dashboards:custom_dashboard_list' %}" class="btn-secondary">Cancelar</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</section>
+
+<style>
+    .form-default { max-width: 480px; }
+    .form-field { margin-bottom: 1rem; }
+    .form-field label { display: block; font-weight: 600; margin-bottom: .3rem; font-size: .9rem; }
+    .form-field input[type="text"],
+    .form-field select {
+        width: 100%;
+        padding: .55rem .7rem;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        background: #fff;
+        font-size: .9rem;
+    }
+    .form-field input[type="checkbox"] { width: auto; margin-right: .4rem; }
+    .form-help { color: #888; font-size: .82rem; margin-top: .2rem; display: block; }
+    .form-error { color: #c62828; font-size: .82rem; margin-top: .2rem; }
+</style>
+{% endblock %}

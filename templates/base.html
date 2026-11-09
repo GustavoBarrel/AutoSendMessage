@@ -1,0 +1,83 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AutoSendMessage{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}?v=13">
+    <style>
+      .toast-container{position:fixed;right:16px;top:88px;z-index:9999;display:flex;flex-direction:column;gap:10px;max-width:420px}
+      .toast{padding:12px 14px;border-radius:10px;box-shadow:0 10px 25px rgba(0,0,0,.15);background:#111827;color:#fff;font-size:14px;line-height:1.35}
+      .toast-success{background:#065f46}
+      .toast-warning{background:#92400e}
+      .toast-error{background:#991b1b}
+      .toast-info{background:#1f2937}
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <a href="{% url 'dashboards:home' %}" class="logo">AutoSendMessage</a>
+        <div class="user-menu">
+            {% if request.user.is_authenticated %}
+            <span class="user-name">{{ request.user.username }}</span>
+            <a href="{% url 'contacts:contact_list' %}" class="btn-link">Contatos</a>
+            {% if current_workspace %}
+            <a href="{% url 'campaigns:campaign_list' %}" class="btn-link">Campanhas</a>
+            <a href="{% url 'dashboards:stats_dashboard' %}" class="btn-link">Estatísticas</a>
+            <a href="{% url 'accounts:workspace_select' %}" class="btn-trocar-perfil">Trocar perfil</a>
+            {% endif %}
+            <form action="{% url 'accounts:logout' %}" method="post" class="form-logout">
+                {% csrf_token %}
+                <button type="submit" class="btn-logout">Sair</button>
+            </form>
+            {% endif %}
+        </div>
+    </header>
+
+    {% if messages %}
+    <div class="toast-container" id="toast-container">
+        {% for message in messages %}
+        <div class="toast toast-{{ message.tags|default:'info' }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    <script>
+      (function() {
+        var box = document.getElementById('toast-container');
+        if (!box) return;
+        var remaining = 6000;
+        var start = Date.now();
+        var timer = null;
+
+        function hide() { box.style.display = 'none'; }
+        function schedule() {
+          clearTimeout(timer);
+          start = Date.now();
+          timer = setTimeout(hide, remaining);
+        }
+        function pause() {
+          if (!timer) return;
+          clearTimeout(timer);
+          timer = null;
+          remaining -= (Date.now() - start);
+          if (remaining < 0) remaining = 0;
+        }
+
+        box.addEventListener('mouseenter', pause);
+        box.addEventListener('mouseleave', function() {
+          if (remaining <= 0) return hide();
+          schedule();
+        });
+
+        schedule();
+      })();
+    </script>
+    {% endif %}
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>
+

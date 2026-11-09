@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} - AutoSendMessage{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">{{ title }}</h2>
+    </div>
+    <div class="section-body">
+        <form method="post" class="form-perfil">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Salvar</button>
+                <a href="{% url 'accounts:workspace_list' %}" class="btn-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %}
+

@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Contatos - AutoSendMessage{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Contatos</h2>
+        <div class="section-actions">
+            <a href="{% url 'contacts:manual_tag_list' %}" class="btn-secondary">Tags</a>
+            <a href="{% url 'contacts:contacts_import' %}" class="btn-primary">Importar Excel</a>
+        </div>
+    </div>
+    <div class="section-body">
+        <form method="get" id="contact-filter-form" class="contact-filters" action="{% url 'contacts:contact_list' %}">
+            <div class="contato-search-form">
+                <label for="contact-search" class="sr-only">Buscar</label>
+                <input type="search" id="contact-search" name="q" value="{{ search_query }}" placeholder="Buscar por nome, celular ou e-mail..." class="input-search-contato" />
+                <button type="submit" class="btn-secondary">Buscar</button>
+                {% if has_active_filters %}
+                <a href="{% url 'contacts:contact_list' %}" class="btn-secondary">Limpar filtros</a>
+                {% endif %}
+            </div>
+
+            <details class="contact-filters__panel"{% if active_filter_count %} open{% endif %}>
+                <summary class="contact-filters__toggle">
+                    Filtros{% if active_filter_count %} <span class="contact-filters__count">({{ active_filter_count }} ativo{{ active_filter_count|pluralize }})</span>{% endif %}
+                </summary>
+
+                <div class="contact-filters__grid">
+                    {% if filter_options.tags %}
+                    <fieldset class="filter-field filter-field--tags">
+                        <legend>Com qualquer destas tags</legend>
+                        <div class="filter-tag-list">
+                            {% for tag in filter_options.tags %}
+                            <label class="filter-tag">
+                                <input type="checkbox" name="tags" value="{{ tag.pk }}"{% if tag in filter_form.cleaned_data.tags %} checked{% endif %} />
+                                {{ tag.name }}
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="filter-field filter-field--tags">
+                        <legend>Sem estas tags</legend>
+                        <div class="filter-tag-list">
+                            {% for tag in filter_options.tags %}
+                            <label class="filter-tag">
+                                <input type="checkbox" name="exclude_tags" value="{{ tag.pk }}"{% if tag in filter_form.cleaned_data.exclude_tags %} checked{% endif %} />
+                                {{ tag.name }}
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </fieldset>
+                    {% endif %}
+
+                    <div class="filter-field">
+                        <label for="filter-category">Categoria</label>
+                        <select id="filter-category" name="category">
+                            <option value="">Todas</option>
+                            {% for value in filter_options.category %}
+                            <option value="{{ value }}"{% if value == filter_form.cleaned_data.category %} selected{% endif %}>{{ value }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="filter-field">
+                        <label for="filter-subcategory">Subcategoria</label>
+                        <select id="filter-subcategory" name="subcategory">
+                            <option value="">Todas</option>
+                            {% for value in filter_options.subcategory %}
+                            <option value="{{ value }}"{% if value == filter_form.cleaned_data.subcategory %} selected{% endif %}>{{ value }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="filter-field">
+                        <label for="filter-state">UF</label>
+                        <select id="filter-state" name="state">
+                            <option value="">Todas</option>
+                            {% for value in filter_options.state %}
+                            <option value="{{ value }}"{% if value == filter_form.cleaned_data.state %} selected{% endif %}>{{ value }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="filter-field">
+                        <label for="filter-city">Cidade</label>
+                        <select id="filter-city" name="city">
+                            <option value="">Todas</option>
+                            {% for value in filter_options.city %}
+                            <option value="{{ value }}"{% if value == filter_form.cleaned_data.city %} selected{% endif %}>{{ value }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="filter-field">
+                        <label for="filter-neighborhood">Bairro</label>
+                        <select id="filter-neighborhood" name="neighborhood">
+                            <option value="">Todos</option>
+                            {% for value in filter_options.neighborhood %}
+                            <option value="{{ value }}"{% if value == filter_form.cleaned_data.neighborhood %} selected{% endif %}>{{ value }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="contact-filters__actions">
+                    <button type="submit" class="btn-primary">Aplicar filtros</button>
+                </div>
+            </details>
+        </form>
+
+        <p class="form-info">Total: {{ total_contacts }} contato(s){% if has_active_filters %} com estes filtros{% endif %}. Contatos são globais e podem ser usados em qualquer perfil.</p>
+
+        <div class="bulk-selection"
+             data-bulk-selection
+             data-storage-key="contacts.bulkSelection"
+             data-filter-query="{{ filters_querystring }}"
+             data-total="{{ total_contacts }}"
+             data-ids-url="{{ contact_ids_url }}"
+             data-forget-ids="{{ forget_bulk_ids|join:',' }}"
+             data-clear="{% if clear_bulk_selection %}1{% else %}0{% endif %}">
+
+            <form method="post" id="bulk-archive-form" class="bulk-bar" action="{{ bulk_archive_url }}" data-bulk-form{% if not page_obj %} hidden{% endif %}>
+                {% csrf_token %}
+                <input type="hidden" name="contact_ids" id="bulk-archive-ids" value="" />
+                <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+                <div class="bulk-bar__status">
+                    <p class="bulk-bar__count" data-bulk-count role="status" tabindex="-1">Marque contatos para arquivar vários de uma vez.</p>
+                    <button type="button" class="btn-secondary bulk-bar__action" data-bulk-select-matching hidden></button>
+                </div>
+                <button type="button" class="btn-secondary bulk-bar__action" data-bulk-clear hidden>Limpar seleção</button>
+                <button type="submit" class="btn-danger-outline bulk-bar__submit" id="bulk-archive-submit" data-bulk-submit>Arquivar selecionados</button>
+            </form>
+            <p class="bulk-error" data-bulk-error role="alert" hidden></p>
+
+            {% if page_obj %}
+            <div class="table-scroll">
+            <table class="table-perfis contact-table">
+                <thead>
+                    <tr>
+                        <th class="col-select">
+                            <label class="select-hit">
+                                <input type="checkbox" id="select-all-page" data-bulk-page aria-label="Selecionar todos desta página" />
+                            </label>
+                        </th>
+                        <th>Celular</th>
+                        <th>Nome</th>
+                        <th>WhatsApp</th>
+                        <th>E-mail</th>
+                        <th>Cidade</th>
+                        <th><span class="sr-only">Ações</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in page_obj %}
+                    <tr>
+                        <td class="col-select">
+                            <label class="select-hit">
+                                <input type="checkbox" form="bulk-archive-form" name="contact_ids_row" value="{{ c.pk }}" data-bulk-row aria-label="Selecionar {{ c.name|default:c.mobile_phone }}" />
+                            </label>
+                        </td>
+                        <td><code>{{ c.mobile_phone }}</code></td>
+                        <td>{{ c.name|default:"—" }}</td>
+                        <td>{% if c.has_whatsapp %}<span class="badge-ativo">Sim</span>{% else %}<span class="badge-inativo">Não</span>{% endif %}</td>
+                        <td>{{ c.email|default:"—" }}</td>
+                        <td>{{ c.city|default:"—" }}</td>
+                        <td class="contact-table__actions">
+                            <a href="{% url 'contacts:contact_tags' c.pk %}" class="btn-link" aria-label="Tags de {{ c.name|default:c.mobile_phone }}">Tags</a>
+                            <a href="{% url 'contacts:contact_confirm_delete' c.pk %}" class="btn-link btn-link-danger" aria-label="Arquivar {{ c.name|default:c.mobile_phone }}">Arquivar</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if page_obj %}
+        {% if page_obj.has_other_pages %}
+        <nav class="pagination" aria-label="Paginação">
+            {% if page_obj.has_previous %}
+            <a href="?{% if filters_querystring %}{{ filters_querystring }}&amp;{% endif %}page={{ page_obj.previous_page_number }}" class="pagination-link pagination-prev">Anterior</a>
+            {% endif %}
+            <span class="pagination-pages">
+                {% for num in page_window %}
+                    {% if page_obj.number == num %}
+                    <span class="pagination-num pagination-num--current" aria-current="page">{{ num }}</span>
+                    {% else %}
+                    <a href="?{% if filters_querystring %}{{ filters_querystring }}&amp;{% endif %}page={{ num }}" class="pagination-num">{{ num }}</a>
+                    {% endif %}
+                {% endfor %}
+                {% if show_ellipsis %}<span class="pagination-ellipsis">…</span>{% endif %}
+                {% if show_last_page %}
+                <a href="?{% if filters_querystring %}{{ filters_querystring }}&amp;{% endif %}page={{ page_obj.paginator.num_pages }}" class="pagination-num">{{ page_obj.paginator.num_pages }}</a>
+                {% endif %}
+            </span>
+            {% if page_obj.has_next %}
+            <a href="?{% if filters_querystring %}{{ filters_querystring }}&amp;{% endif %}page={{ page_obj.next_page_number }}" class="pagination-link pagination-next">Próxima</a>
+            {% endif %}
+        </nav>
+        {% endif %}
+        {% else %}
+        <div class="empty-state">
+            <div class="icon">👥</div>
+            <p>Nenhum contato encontrado.{% if has_active_filters %} Tente outros filtros ou <a href="{% url 'contacts:contact_list' %}">limpe os filtros</a>.{% else %} Importe uma planilha Excel para começar.{% endif %}</p>
+            {% if not has_active_filters %}
+            <a href="{% url 'contacts:contacts_import' %}" class="btn-primary">Importar Excel</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</section>
+<script src="{% static 'js/contact_bulk_selection.js' %}?v=3" defer></script>
+{% endblock %}

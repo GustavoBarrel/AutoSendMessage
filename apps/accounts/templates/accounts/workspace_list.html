@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Perfis - AutoSendMessage{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Perfis</h2>
+        <a href="{% url 'accounts:workspace_create' %}" class="btn-primary">Novo perfil</a>
+    </div>
+    <div class="section-body">
+        {% if workspaces %}
+        <table class="table-perfis">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Slug</th>
+                    <th>Cor</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in workspaces %}
+                <tr>
+                    <td>{{ p.name }}</td>
+                    <td><code>{{ p.slug }}</code></td>
+                    <td><span style="display:inline-block;width:20px;height:20px;border-radius:6px;background:{{ p.color }};"></span> {{ p.color }}</td>
+                    <td class="cell-actions">
+                        <a href="{% url 'accounts:workspace_edit' p.pk %}" class="btn-link">Editar</a>
+                        <a href="{% url 'accounts:workspace_confirm_delete' p.pk %}" class="btn-link btn-link-danger">Excluir</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>Nenhum perfil cadastrado.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}
+

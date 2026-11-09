@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Mapear colunas - Importar contatos{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Mapear colunas do Excel</h2>
+        <a href="{% url 'contacts:contacts_import' %}" class="btn-secondary">Voltar ao upload</a>
+    </div>
+    <div class="section-body">
+        {% include "contacts/import_wizard_steps.html" with wizard_step=2 wizard_has_dup=False %}
+        <p class="form-info">Para cada <strong>campo interno</strong> (tabela de contatos), escolha a <strong>coluna do arquivo</strong> correspondente. O campo <strong>celular</strong> é obrigatório.</p>
+        <form method="post" class="form-perfil">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="alert alert-warning">{{ form.non_field_errors }}</div>
+            {% endif %}
+            <div class="table-scroll">
+                <table class="table-perfis table-mapeamento">
+                    <thead>
+                        <tr>
+                            <th class="col-excel">Campo interno</th>
+                            <th class="col-interno">Coluna do arquivo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for field in form %}
+                        <tr>
+                            <td class="col-excel">
+                                <div class="excel-col-name">{{ field.label }}</div>
+                            </td>
+                            <td class="col-interno">
+                                <div class="map-select map-select-row">
+                                    {{ field }}
+                                    <button type="button" class="btn-clear-map" data-target="{{ field.id_for_label }}" title="Não importar">×</button>
+                                </div>
+                                <div class="field-errors">{{ field.errors }}</div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Continuar para preview</button>
+            </div>
+        </form>
+
+        <script>
+          (function () {
+            // Prevents the same file column from being chosen for 2 internal fields.
+            var form = document.querySelector('form.form-perfil');
+            if (!form) return;
+            var selects = Array.prototype.slice.call(form.querySelectorAll('select'));
+            if (!selects.length) return;
+
+            function refresh() {
+              var chosen = new Set();
+              selects.forEach(function (s) {
+                if (s.value) chosen.add(s.value);
+              });
+              selects.forEach(function (s) {
+                var current = s.value;
+                Array.prototype.slice.call(s.options).forEach(function (opt) {
+                  if (!opt.value) return;
+                  opt.disabled = (opt.value !== current) && chosen.has(opt.value);
+                });
+              });
+            }
+
+            selects.forEach(function (s) { s.addEventListener('change', refresh); });
+            refresh();
+
+            Array.prototype.slice.call(form.querySelectorAll('.btn-clear-map')).forEach(function (btn) {
+              btn.addEventListener('click', function () {
+                var id = btn.getAttribute('data-target');
+                var sel = id ? document.getElementById(id) : null;
+                if (!sel) return;
+                sel.value = '';
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+              });
+            });
+          })();
+        </script>
+    </div>
+</section>
+{% endblock %}

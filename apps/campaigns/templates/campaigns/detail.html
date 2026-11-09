@@ -1,0 +1,1145 @@
+{% extends "base.html" %}
+{% load common_extras %}
+{% block title %}{{ campaign.name }} — Painel{% endblock %}
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">{{ campaign.name }}</h2>
+        {% if not campaign.activated_at %}
+        <a href="{% url 'campaigns:campaign_wizard' campaign.pk 'audience' %}" class="btn-secondary">Assistente</a>
+        {% endif %}
+    </div>
+    <div class="section-body">
+
+        {% if campaign.is_deleted %}
+        <div style="background:#fff3e0;border:1.5px solid #e65100;border-radius:8px;padding:.85rem 1.1rem;margin-bottom:1.25rem;display:flex;align-items:center;gap:.65rem;">
+            <span style="font-size:1.3rem;">🗂️</span>
+            <div>
+                <strong style="color:#e65100;">Campanha arquivada</strong>
+                <span style="color:#616161;font-size:.88rem;margin-left:.5rem;">em {{ campaign.deleted_at|date:"d/m/Y \à\s H:i:s" }}</span>
+                <p style="margin:.15rem 0 0;font-size:.85rem;color:#616161;">
+                    Esta campanha está em modo somente leitura. O histórico de tentativas abaixo está preservado.
+                </p>
+            </div>
+        </div>
+        {% endif %}
+
+        <p>
+            <strong>Status:</strong> {{ campaign.get_status_display }}
+            &nbsp;·&nbsp;
+            <strong>Destinatários (estimativa):</strong> {{ preview_count }}
+        </p>
+        <div style="margin:.35rem 0 1rem;">
+            <div style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;">
+                <div style="font-size:.9rem;">
+                    <strong>Início agendado:</strong>
+                    {% if campaign.start_at %}
+                        {{ campaign.start_at|date:"d/m/Y H:i:s" }}
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </div>
+                {% if campaign.status == 'draft' or campaign.status == 'paused' %}
+                <form method="post" action="{% url 'campaigns:campaign_action' campaign.pk %}" class="schedule-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="set_start_at">
+                    <div class="schedule-input">
+                        <span class="schedule-input__icon" aria-hidden="true">🗓️</span>
+                        <input
+                            type="datetime-local"
+                            name="start_at"
+                            class="schedule-input__control"
+                            value="{% if campaign.start_at %}{{ campaign.start_at|date:'Y-m-d\\TH:i' }}{% endif %}"
+                        >
+                    </div>
+                    <button type="submit" class="btn-secondary schedule-btn">Salvar</button>
+                    {% if campaign.start_at %}
+                    <button type="submit" name="clear" value="1" class="btn-danger-outline schedule-clear">Limpar</button>
+                    {% endif %}
+                </form>
+                <div class="text-muted" style="font-size:.82rem;line-height:1.35;max-width:44rem;">
+                    Se a data/hora for futura, ao <strong>iniciar envio</strong> os jobs entram na fila como <strong>agendados</strong> e o worker só começa a enviar a partir desse horário.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        <p class="form-info"><strong>Público:</strong> {{ audience_desc }}</p>
+
+        {# ── Summary cards ── #}
+        <div class="dashboard-cards" style="margin: 1rem 0;">
+            <div class="dashboard-card"><div class="label">Pendentes</div><div class="value">{{ stats.pending }}</div></div>
+            <div class="dashboard-card"><div class="label">Processando</div><div class="value">{{ stats.locked }}</div></div>
+            <div class="dashboard-card"><div class="label">Aguardando chip</div><div class="value">{{ stats.waiting_chip }}</div></div>
+            <div class="dashboard-card"><div class="label">Enviados</div><div class="value">{{ stats.sent }}</div></div>
+            <div class="dashboard-card"><div class="label">Falhas</div><div class="value">{{ stats.failed }}</div></div>
+            <div class="dashboard-card"><div class="label">Cancelados</div><div class="value">{{ stats.cancelled }}</div></div>
+            <div class="dashboard-card"><div class="label">Total</div><div class="value">{{ stats.total }}</div></div>
+        </div>
+
+        {% if show_campaign_queue_hub %}
+        <div class="campaign-queue-hub" role="region" aria-labelledby="cqh-title">
+            <h3 id="cqh-title" class="cqh-title">Fila da campanha — o que fazer quando algo trava</h3>
+            <p class="cqh-lead">
+                Três situações comuns: <strong>chip desconectado</strong> (mensagens em «aguardando chip»),
+                <strong>falha após tentativa</strong> (status falha na tabela abaixo) e
+                <strong>falta de chip livre</strong> (todos bloqueados ou ocupados em outra campanha).
+                O worker usa os chips já vinculados a esta campanha; você pode <strong>adicionar mais chips aqui</strong> sem reabrir o assistente.
+            </p>
+
+            <div class="cqh-section">
+                <h4 class="cqh-section-title">1) Chip desconectado — «Aguardando chip»</h4>
+                <ul class="cqh-list">
+                    <li><strong>Conseguiu reconectar</strong> o WhatsApp na Evolution? Em geral basta voltar ao estado «aberto»: as mensagens desse chip <strong>retomam sozinhas</strong> na fila (não precisa redistribuir).</li>
+                    <li><strong>Não dá para reconectar</strong> (chip bloqueado, número banido, etc.)? Use <strong>redistribuir</strong> para mover a fila para <strong>outro chip já vinculado</strong> que esteja <strong>conectado</strong> na Evolution. Se só há um chip, <a href="#cqh-add-chips">adicione outro abaixo</a> e depois redistribua.</li>
+                </ul>
+                {% if stats.waiting_chip > 0 %}
+                <p class="cqh-stat"><strong>{{ stats.waiting_chip }}</strong> mensagem(ns) em <strong>Aguardando chip</strong> (não ficam tentando envio até o chip voltar ou você redistribuir).</p>
+                {% if can_show_redistribute_form %}
+                <form method="post" action="{% url 'campaigns:campaign_action' campaign.pk %}" class="form-perfil redist-waiting-form" id="form-redistribute-waiting">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="redistribute_waiting">
+                    <div class="redist-waiting-grid">
+                        <fieldset class="modal-retry-chips-fieldset redist-waiting-source">
+                            <legend class="modal-retry-step-label">Origem</legend>
+                            <p class="modal-retry-step-hint" id="redist-orig-hint">Chip cujas mensagens estão paradas (fila «aguardando chip»). Pode estar desconectado na Evolution — é de onde a fila será retirada.</p>
+                            <label for="id_source_chip" class="sr-only">Chip de origem</label>
+                            <select name="source_chip_id" id="id_source_chip" required aria-describedby="redist-orig-hint">
+                                {% for row in waiting_by_chip %}
+                                <option value="{{ row.chip_id }}">{{ row.chip__name }} ({{ row.n }} na fila)</option>
+                                {% endfor %}
+                            </select>
+                        </fieldset>
+                        <fieldset class="modal-retry-chips-fieldset redist-waiting-dest">
+                            <legend class="modal-retry-step-label">Destino</legend>
+                            <p class="modal-retry-step-hint">{% if evolution_ok %}Só aparecem chips <strong>conectados</strong> (Evolution aberta). {% endif %}Marque um ou mais chips que continuarão o envio. O chip de origem some desta lista automaticamente.</p>
+                            <div class="modal-retry-list redist-dest-list" id="redist-dest-chips">
+                                {% for cc in redistribute_dest_campaign_chips %}
+                                <label class="checkbox-label chip-pick redist-dest-label" data-dest-chip-id="{{ cc.chip_id }}">
+                                    <input type="checkbox" name="dest_chip_ids" value="{{ cc.chip_id }}">
+                                    <span class="chip-pick__main">
+                                        <span class="chip-pick__name">{{ cc.chip.name }}</span>
+                                        <code class="chip-pick__inst">{{ cc.chip.instance_name }}</code>
+                                    </span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </fieldset>
+                    </div>
+                    <div class="form-actions" style="margin-top:1rem;margin-bottom:0;">
+                        <button type="submit" class="btn-primary">Redistribuir</button>
+                    </div>
+                </form>
+                {% elif not evolution_ok and campaign_chips|length <= 1 %}
+                <p class="cqh-note">Para redistribuir é preciso <strong>ao menos dois chips</strong> nesta campanha. <a href="#cqh-add-chips">Adicione um chip</a> na seção 3 ou reconecte este em <a href="{% url 'chips:chip_list' %}">Chips</a> / Evolution.</p>
+                {% elif evolution_ok and waiting_by_chip and not can_show_redistribute_form %}
+                <p class="cqh-note">Não há chip <strong>conectado</strong> na Evolution disponível como destino (ou só há um chip na campanha). Reconecte um chip em <a href="{% url 'chips:chip_list' %}">Chips</a>, use a <a href="#cqh-add-chips">seção 3</a> para vincular um chip já conectado, e atualize esta página.</p>
+                {% elif stats.waiting_chip > 0 %}
+                <p class="cqh-note">Há mensagens aguardando chip, mas a redistribuição guiada não está disponível (lista por chip vazia). Use a tabela abaixo para inspecionar os jobs ou reconecte os chips na Evolution.</p>
+                {% endif %}
+                {% else %}
+                <p class="cqh-ok">Nenhuma mensagem em «aguardando chip» no momento.</p>
+                {% endif %}
+            </div>
+
+            <div class="cqh-section">
+                <h4 class="cqh-section-title">2) Falhas de envio — reenvio</h4>
+                <p class="cqh-p">Falhas já tentadas ficam com status <strong>Falha</strong>. Você pode <strong>reenviar</strong> em rodízio pelos chips elegíveis (respeitando limites de cada um). Dá para reenviar tudo, só erros de chip/conexão, só conteúdo/número, ou <strong>só as linhas que você marcar</strong> na tabela abaixo (coluna de seleção nas falhas).</p>
+                <p class="cqh-p text-muted" style="font-size:.82rem;">Se o contato tiver número inválido ou bloqueio permanente, reenviar pode falhar de novo — vale corrigir o cadastro do contato.</p>
+                {% if stats.failed > 0 %}
+                <div class="cqh-failure-box">
+                    <strong class="cqh-failure-box__title">Análise automática das falhas</strong>
+                    <p class="cqh-p" style="font-size:.82rem;color:#616161;margin-top:.35rem;">Classificação pelo texto do último erro (pista; confira o histórico de tentativas mais abaixo).</p>
+                    <ul class="cqh-failure-list">
+                        {% for key, label in failure_labels.items %}
+                        <li><strong>{{ label }}:</strong> {{ failure_breakdown|get_item:key|default:0 }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% if retry_eligible_chips %}
+                <button type="button" class="btn-retry" onclick="openRetryModal()">Abrir reenvio de falhas ({{ stats.failed }})</button>
+                {% else %}
+                <p class="retry-blocked-msg" style="margin-top:.5rem;">Não há chip disponível para reenvio (inativo ou já em outra campanha ativa). Adicione um chip livre à campanha na seção seguinte ou libere um chip em <a href="{% url 'chips:chip_list' %}">Chips</a>.</p>
+                {% endif %}
+                {% else %}
+                <p class="cqh-ok">Nenhuma falha registrada na fila neste momento.</p>
+                {% endif %}
+            </div>
+
+            <div class="cqh-section" id="cqh-add-chips">
+                <h4 class="cqh-section-title">3) Adicionar chips a esta campanha</h4>
+                <p class="cqh-p">Útil quando <strong>todos os chips da campanha</strong> ficam indisponíveis ou você precisa de mais um para <strong>redistribuir</strong> ou <strong>reenviar</strong>. Só entram chips do mesmo perfil, ativos e que não estejam presos a outra campanha ativa.{% if evolution_ok %} Com a Evolution configurada, <strong>só listamos chips conectados (abertos)</strong> aqui.{% endif %}</p>
+                {% if campaign.status == 'draft' or campaign.status == 'active' or campaign.status == 'paused' %}
+                    {% if available_chips_to_link %}
+                    {% if available_chips_omitted_offline > 0 %}
+                    <p class="cqh-note" style="margin-bottom:.5rem;">{{ available_chips_omitted_offline }} outro(s) chip(s) do perfil poderiam ser vinculados, mas estão <strong>desconectados</strong> na Evolution e foram ocultados.</p>
+                    {% endif %}
+                    <form method="post" action="{% url 'campaigns:campaign_action' campaign.pk %}" class="cqh-add-chips-form" id="form-add-campaign-chips">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="add_campaign_chips">
+                        <p class="modal-retry-step-hint" style="margin-bottom:.5rem;">Marque um ou mais chips e confirme.</p>
+                        <div class="cqh-add-chips-grid">
+                            {% for ch in available_chips_to_link %}
+                            <label class="checkbox-label chip-pick cqh-add-chip-label">
+                                <input type="checkbox" name="add_chip_ids" value="{{ ch.pk }}">
+                                <span class="chip-pick__main">
+                                    <span class="chip-pick__name">{{ ch.name }}</span>
+                                    <code class="chip-pick__inst">{{ ch.instance_name }}</code>
+                                </span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        <div class="form-actions" style="margin-top:.85rem;margin-bottom:0;">
+                            <button type="submit" class="btn-primary">Adicionar à campanha</button>
+                        </div>
+                    </form>
+                    {% else %}
+                    {% if available_chips_omitted_offline > 0 %}
+                    <p class="cqh-note">Há chip(s) do perfil que poderiam ser vinculados, mas <strong>nenhum está conectado</strong> na Evolution agora ({{ available_chips_omitted_offline }} oculto(s)). Reconecte em <a href="{% url 'chips:chip_list' %}">Chips</a> e atualize esta página.</p>
+                    {% else %}
+                    <p class="cqh-note">Não há outros chips do perfil disponíveis para vincular (todos já estão nesta campanha ou estão em uso em outra campanha ativa). Cadastre um chip novo em <a href="{% url 'chips:chip_create' %}">Novo chip</a> ou ajuste em <a href="{% url 'chips:chip_list' %}">Chips</a>.</p>
+                    {% endif %}
+                    {% endif %}
+                {% else %}
+                <p class="cqh-note">Com a campanha finalizada ou cancelada, não é possível alterar chips por aqui.</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Campaign chips ── #}
+        <h3 class="chip-form-block-title" style="margin-top:1.2rem;">
+            Chips configurados
+            <span style="font-weight:400;font-size:.85rem;color:#666;margin-left:.5rem;">({{ campaign_chips|length }} chip{{ campaign_chips|length|pluralize:"s" }})</span>
+        </h3>
+        {% if campaign_chips %}
+        <table class="table-perfis" style="margin-bottom:1.5rem;">
+            <thead>
+                <tr>
+                    <th>Chip</th>
+                    <th>Instância</th>
+                    <th>Tipo</th>
+                    <th>Ativo</th>
+                    <th>Enviados</th>
+                    <th>Falhas</th>
+                    <th>Aguard. chip</th>
+                    <th>Total jobs</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cc in campaign_chips %}
+                <tr>
+                    <td><strong>{{ cc.chip.name }}</strong></td>
+                    <td><code style="font-size:.8rem;">{{ cc.chip.instance_name }}</code></td>
+                    <td>{{ cc.chip.get_account_type_display }}</td>
+                    <td>{% if cc.is_active %}<span class="badge-ativo">Sim</span>{% else %}<span class="badge-inativo">Não</span>{% endif %}</td>
+                    <td>
+                        {% for row in by_chip %}{% if row.chip_id == cc.chip_id %}<span style="color:#2e7d32;font-weight:600;">{{ row.sent }}</span>{% endif %}{% endfor %}
+                    </td>
+                    <td>
+                        {% for row in by_chip %}{% if row.chip_id == cc.chip_id %}<span style="color:{% if row.failures > 0 %}#c62828{% else %}#616161{% endif %};">{{ row.failures }}</span>{% endif %}{% endfor %}
+                    </td>
+                    <td>
+                        {% for row in by_chip %}{% if row.chip_id == cc.chip_id %}<span style="color:{% if row.aguardando_chip > 0 %}#3949ab{% else %}#616161{% endif %};">{{ row.aguardando_chip }}</span>{% endif %}{% endfor %}
+                    </td>
+                    <td>
+                        {% for row in by_chip %}{% if row.chip_id == cc.chip_id %}{{ row.total }}{% endif %}{% endfor %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted" style="margin-bottom:1.5rem;">Nenhum chip configurado nesta campanha.</p>
+        {% endif %}
+
+        {# ── Message control ── #}
+        <h3 class="chip-form-block-title" style="margin-top:1.5rem;">Controle de mensagens</h3>
+        <p class="form-info" style="margin-bottom:.85rem;font-size:.86rem;line-height:1.45;">
+            A coluna <strong>Erro / aviso</strong> mostra falhas da API ou, quando o envio vai para o <strong>dia seguinte</strong>, o aviso de <strong>limite diário</strong> do chip.
+        </p>
+
+        {# Status filter #}
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem;align-items:center;">
+            <span style="font-weight:600;font-size:.85rem;">Filtrar:</span>
+            <a href="{{ job_filter_url_clear }}" class="btn-secondary{% if not status_filter %} btn-active{% endif %}" style="font-size:.82rem;padding:.25rem .7rem;">
+                Todos ({{ stats.total }})
+            </a>
+            {% for val, label in status_choices %}
+            <a href="{{ job_filter_urls|get_item:val }}"
+               class="btn-secondary{% if status_filter == val %} btn-active{% endif %}"
+               style="font-size:.82rem;padding:.25rem .7rem;">
+                {{ label }} ({{ stats|get_item:val|default:0 }})
+            </a>
+            {% endfor %}
+        </div>
+
+        {% if page_obj.object_list %}
+        <div style="overflow-x:auto;">
+        <table class="table-perfis">
+            <thead>
+                <tr>
+                    {% if stats.failed > 0 %}
+                    <th class="retry-col-select" title="Para reenviar só algumas falhas, marque aqui e use o modal">
+                        <input type="checkbox" id="retry-select-all-page" aria-label="Marcar todas as falhas desta página">
+                    </th>
+                    {% endif %}
+                    <th>Variação</th>
+                    <th>Contato</th>
+                    <th>Celular</th>
+                    <th>Chip</th>
+                    <th>Status</th>
+                    <th>Enviado / Agendado</th>
+                    <th style="min-width:200px;">Erro / aviso</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in page_obj %}
+                <tr>
+                    {% if stats.failed > 0 %}
+                    <td class="retry-col-select">
+                        {% if job.status == 'failed' %}
+                        <input
+                            type="checkbox"
+                            class="retry-job-cb"
+                            value="{{ job.pk }}"
+                            data-cause="{{ job_failed_causes|get_item:job.pk|default:'unknown' }}"
+                            aria-label="Incluir falha de {{ job.contact.name }} no reenvio selecionado"
+                        >
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    {% endif %}
+                    <td>
+                        {% if job.variant %}
+                            <span class="badge badge-variant">Mensagem {{ job.variant.position }}</span>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ job.contact.name }}</td>
+                    <td style="white-space:nowrap;">{{ job.contact.mobile_phone }}</td>
+                    <td>{% if job.chip %}{{ job.chip.name }}{% elif job.chip_name_snapshot %}{{ job.chip_name_snapshot }} <span class="text-muted" style="font-size:.75rem;">(excluído)</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                    <td>
+                        <span class="badge badge-status badge-status-{{ job.status }}">
+                            {{ job.get_status_display }}
+                        </span>
+                    </td>
+                    <td style="font-size:.82rem;vertical-align:top;">
+                        {% if job.sent_at %}
+                            <span style="white-space:nowrap;">{{ job.sent_at|date:"d/m/Y H:i:s" }}</span>
+                        {% elif job.scheduled_at %}
+                            <span class="text-muted" style="white-space:nowrap;">ag. {{ job.scheduled_at|date:"d/m/Y H:i:s" }}</span>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size:.8rem;max-width:280px;word-break:break-word;vertical-align:top;">
+                        {% if job.send_error_display %}
+                        <div class="send-error-panel send-error-panel--463" role="alert">
+                            <p>{{ job.send_error_display.title }}<br>{{ job.send_error_display.detail }}</p>
+                        </div>
+                        {% elif job.last_error %}
+                            <span class="text-muted">{{ job.last_error|truncatechars:160 }}</span>
+                        {% elif job.status == 'waiting_chip' and job.schedule_defer_reason %}
+                            <span class="schedule-defer-hint">{{ job.get_schedule_defer_reason_display }}</span>
+                        {% elif job.status == 'pending' and job.scheduled_at %}
+                            {% with warning=job.get_schedule_warning_display %}
+                            {% if warning %}
+                            <span class="schedule-defer-hint">{{ warning }}</span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                            {% endwith %}
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+
+        {# Pagination #}
+        {% if page_obj.has_other_pages %}
+        <div style="display:flex;gap:.5rem;align-items:center;margin-top:1rem;flex-wrap:wrap;">
+            {% if job_pagination.prev %}
+            <a href="{{ job_pagination.prev }}" class="btn-secondary" style="font-size:.82rem;padding:.25rem .7rem;">← Anterior</a>
+            {% endif %}
+            <span style="font-size:.85rem;">
+                Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                &nbsp;({{ page_obj.paginator.count }} registro{{ page_obj.paginator.count|pluralize:"s" }})
+            </span>
+            {% if job_pagination.next %}
+            <a href="{{ job_pagination.next }}" class="btn-secondary" style="font-size:.82rem;padding:.25rem .7rem;">Próxima →</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% else %}
+        <p class="text-muted" style="padding:.75rem 0;">Nenhum job encontrado{% if status_filter %} com este status{% endif %}.</p>
+        {% endif %}
+
+        {# ── Send attempts (CampaignSendAttempt) ── #}
+        <h3 class="chip-form-block-title" style="margin-top:2rem;">
+            Histórico de tentativas
+            <span style="font-weight:400;font-size:.85rem;color:#666;margin-left:.5rem;">
+                ({{ attempt_counts.total }} no total{% if attempt_result %} · {{ attempts_page_obj.paginator.count }} com este filtro{% endif %})
+            </span>
+        </h3>
+        <p class="form-info" style="margin-bottom:.65rem;font-size:.82rem;line-height:1.45;">
+            Cada linha é uma tentativa real de envio (sucesso ou erro da API). Use o filtro para achar falhas ou envios concluídos.
+        </p>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem;align-items:center;">
+            <span style="font-weight:600;font-size:.85rem;">Filtrar tentativas:</span>
+            <a href="{{ attempt_filter_links.all }}" class="btn-secondary{% if not attempt_result %} btn-active{% endif %}" style="font-size:.82rem;padding:.25rem .7rem;">
+                Todas ({{ attempt_counts.total }})
+            </a>
+            <a href="{{ attempt_filter_links.sent }}" class="btn-secondary{% if attempt_result == 'sent' %} btn-active{% endif %}" style="font-size:.82rem;padding:.25rem .7rem;">
+                Enviadas ({{ attempt_counts.sent }})
+            </a>
+            <a href="{{ attempt_filter_links.failed }}" class="btn-secondary{% if attempt_result == 'failed' %} btn-active{% endif %}" style="font-size:.82rem;padding:.25rem .7rem;">
+                Falhas ({{ attempt_counts.failed }})
+            </a>
+            {% if attempt_counts.open or attempt_result == 'open' %}
+            <a href="{{ attempt_filter_links.open }}" class="btn-secondary{% if attempt_result == 'open' %} btn-active{% endif %}" style="font-size:.82rem;padding:.25rem .7rem;">
+                Sem horário de fim ({{ attempt_counts.open }})
+            </a>
+            {% endif %}
+        </div>
+        {% if attempt_counts.total == 0 %}
+        <p class="text-muted" style="padding:.5rem 0;">Nenhuma tentativa registrada ainda. O worker precisa estar rodando para processar a fila.</p>
+        {% elif not attempts_page_obj.object_list %}
+        <p class="text-muted" style="padding:.5rem 0;">Nenhuma tentativa corresponde a este filtro. Escolha outra opção acima ou outra página.</p>
+        {% else %}
+        <div style="overflow-x:auto;">
+        <table class="table-perfis" style="margin-bottom:1rem;">
+            <thead>
+                <tr>
+                    <th>Job</th>
+                    <th>Contato</th>
+                    <th>Chip</th>
+                    <th>Tentativa</th>
+                    <th>Resultado</th>
+                    <th>HTTP</th>
+                    <th>Horário</th>
+                    <th>Erro</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for att in attempts_page_obj %}
+                <tr>
+                    <td style="font-size:.8rem;color:#616161;">#{{ att.job_id }}</td>
+                    <td>
+                        <div style="display:flex;flex-direction:column;gap:.15rem;">
+                            <strong style="font-size:.9rem;line-height:1.2;">{{ att.job.contact.name }}</strong>
+                            <span class="text-muted" style="white-space:nowrap;font-size:.8rem;">{{ att.job.contact.mobile_phone }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div style="display:flex;flex-direction:column;gap:.15rem;">
+                            <strong style="font-size:.86rem;line-height:1.2;">
+                                {% if att.job.chip %}{{ att.job.chip.name }}{% elif att.job.chip_name_snapshot %}{{ att.job.chip_name_snapshot }}{% else %}—{% endif %}
+                            </strong>
+                            {% if att.job.chip %}
+                            <span class="text-muted" style="white-space:nowrap;font-size:.76rem;">{{ att.job.chip.instance_name }}</span>
+                            {% elif att.job.chip_name_snapshot %}
+                            <span class="text-muted" style="white-space:nowrap;font-size:.76rem;">snapshot</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td style="text-align:center;">{{ att.attempt_no }}</td>
+                    <td>
+                        {% if att.send_error_display %}
+                            <span class="badge badge-status badge-status-failed" title="WhatsApp erro 463">Não enviado</span>
+                        {% elif att.success %}
+                            <span class="badge badge-status badge-status-sent">Enviado</span>
+                        {% else %}
+                            <span class="badge badge-status badge-status-failed">Falha</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align:center;font-size:.82rem;">{{ att.http_status|default:"—" }}</td>
+                    <td style="white-space:nowrap;font-size:.82rem;">
+                        {% if att.finished_at %}{{ att.finished_at|date:"d/m/Y H:i:s" }}{% else %}—{% endif %}
+                    </td>
+                    <td class="text-muted" style="font-size:.78rem;max-width:320px;word-break:break-word;vertical-align:top;">
+                        {% if att.send_error_display %}
+                        <div class="send-error-panel send-error-panel--463" role="alert">
+                            <p>{{ att.send_error_display.title }}<br>{{ att.send_error_display.detail }}</p>
+                        </div>
+                        {% elif att.error_text %}
+                            {% if att.error_text|length > 80 %}
+                            <span>{{ att.error_text|slice:":80" }}</span><details class="attempt-error-details"><summary class="attempt-error-dots" title="Ver erro completo">...</summary><div class="attempt-error-full">{{ att.error_text }}</div></details>
+                            {% else %}
+                            {{ att.error_text }}
+                            {% endif %}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% if attempts_page_obj.has_other_pages %}
+        <div style="display:flex;gap:.5rem;align-items:center;margin-top:.5rem;flex-wrap:wrap;">
+            {% if attempts_pagination.prev %}
+            <a href="{{ attempts_pagination.prev }}" class="btn-secondary" style="font-size:.82rem;padding:.25rem .7rem;">← Anterior</a>
+            {% endif %}
+            <span style="font-size:.85rem;">
+                Página {{ attempts_page_obj.number }} de {{ attempts_page_obj.paginator.num_pages }}
+                &nbsp;({{ attempts_page_obj.paginator.count }} registro{{ attempts_page_obj.paginator.count|pluralize:"s" }} neste filtro)
+            </span>
+            {% if attempts_pagination.next %}
+            <a href="{{ attempts_pagination.next }}" class="btn-secondary" style="font-size:.82rem;padding:.25rem .7rem;">Próxima →</a>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% endif %}
+
+        {# ── Actions ── #}
+        <div class="chip-form-block" style="margin-top:2rem;">
+            <h3 class="chip-form-block-title">Ações</h3>
+            <div class="action-row">
+            {% if campaign.is_deleted %}
+                <a href="{% url 'campaigns:campaign_list' %}?archived=1" class="btn-secondary">← Ver arquivadas</a>
+            {% elif campaign.status == 'draft' %}
+                <form method="post" action="{% url 'campaigns:campaign_action' campaign.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="activate">
+                    <button type="submit" class="btn-primary">Iniciar envio</button>
+                </form>
+                <a href="{% url 'campaigns:campaign_confirm_delete' campaign.pk %}" class="btn-danger-outline">Excluir</a>
+            {% elif campaign.status == 'active' %}
+                <form method="post" action="{% url 'campaigns:campaign_action' campaign.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="pause">
+                    <button type="submit" class="btn-secondary">Pausar</button>
+                </form>
+                {% if not show_campaign_queue_hub and stats.failed > 0 %}
+                {% if retry_eligible_chips %}
+                <button type="button" class="btn-retry" onclick="openRetryModal()">
+                    ↩ Reenviar falhas ({{ stats.failed }})
+                </button>
+                {% else %}
+                <span class="retry-blocked-msg">Não é possível reenviar: nenhum chip disponível (inativo ou em outra campanha ativa).</span>
+                {% endif %}
+                {% endif %}
+                <button type="button" class="btn-warning-outline" onclick="openFinishModal()">Finalizar campanha</button>
+            {% elif campaign.status == 'paused' %}
+                <form method="post" action="{% url 'campaigns:campaign_action' campaign.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="resume">
+                    <button type="submit" class="btn-primary">Retomar</button>
+                </form>
+                <form method="post" action="{% url 'campaigns:campaign_action' campaign.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="activate">
+                    <button type="submit" class="btn-secondary">Enfileirar novamente</button>
+                </form>
+                {% if not show_campaign_queue_hub and stats.failed > 0 %}
+                {% if retry_eligible_chips %}
+                <button type="button" class="btn-retry" onclick="openRetryModal()">
+                    ↩ Reenviar falhas ({{ stats.failed }})
+                </button>
+                {% else %}
+                <span class="retry-blocked-msg">Não é possível reenviar: nenhum chip disponível (inativo ou em outra campanha ativa).</span>
+                {% endif %}
+                {% endif %}
+                <button type="button" class="btn-warning-outline" onclick="openFinishModal()">Finalizar campanha</button>
+                <a href="{% url 'campaigns:campaign_confirm_delete' campaign.pk %}" class="btn-danger-outline">Excluir</a>
+            {% elif campaign.status == 'finished' %}
+                <span class="status-pill status-pill-finished">Campanha finalizada</span>
+                {% if not show_campaign_queue_hub and stats.failed > 0 %}
+                {% if retry_eligible_chips %}
+                <button type="button" class="btn-retry" onclick="openRetryModal()">
+                    ↩ Reenviar falhas ({{ stats.failed }})
+                </button>
+                {% else %}
+                <span class="retry-blocked-msg">Não é possível reenviar: nenhum chip disponível (inativo ou em outra campanha ativa).</span>
+                {% endif %}
+                {% endif %}
+                <a href="{% url 'campaigns:campaign_confirm_delete' campaign.pk %}" class="btn-danger-outline">Excluir</a>
+            {% else %}
+                <span class="status-pill status-pill-finished">Campanha finalizada</span>
+                <a href="{% url 'campaigns:campaign_confirm_delete' campaign.pk %}" class="btn-danger-outline">Excluir</a>
+            {% endif %}
+            </div>
+            {% if campaign.status == 'paused' %}
+            <p class="form-info" style="margin-top:.5rem;">"Enfileirar novamente" adiciona contatos do público atual que ainda não estão na fila.</p>
+            {% endif %}
+        </div>
+
+    </div>
+</section>
+
+{# ── Modal: retry failures ── #}
+{% if retry_eligible_chips %}
+<div id="modal-retry" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="modal-retry-title">
+    <div class="modal-box modal-box--retry">
+        <div class="modal-retry-head">
+            <h3 class="chip-form-block-title" id="modal-retry-title">Reenviar falhas</h3>
+            <button type="button" class="btn-secondary btn-secondary--sm" onclick="closeRetryModal()">Fechar</button>
+        </div>
+        <form method="post" action="{% url 'campaigns:campaign_action' campaign.pk %}" id="form-retry-failed" class="form-perfil modal-retry-form" style="margin:0;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="retry_failed">
+            <div id="retry-job-ids-hidden" aria-hidden="true"></div>
+
+            <div class="modal-retry-body">
+            <p class="modal-retry-summary" aria-live="polite">
+                <strong>{{ stats.failed }}</strong>
+                <span>envio{{ stats.failed|pluralize:"s" }} em falha nesta campanha.</span>
+            </p>
+
+            <fieldset class="modal-retry-scope-fieldset">
+                <legend class="modal-retry-step-label">Passo 1 — O que reenviar?</legend>
+                <p class="modal-retry-step-hint">Escolha uma opção. Para marcar à mão, use a tabela <strong>Controle de mensagens</strong> (filtro <strong>Falha</strong> mostra só erros).</p>
+                <div class="modal-retry-scope-list">
+                    <label class="modal-retry-scope-row">
+                        <span class="modal-retry-scope-card">
+                            <span class="modal-retry-scope-top">
+                                <input type="radio" name="retry_scope" value="all" checked>
+                                <span class="modal-retry-scope-title">Todas as falhas ({{ stats.failed }}).</span>
+                            </span>
+                            <span class="modal-retry-scope-desc">Reenvia todos os destinatários que estão com erro nesta campanha.</span>
+                        </span>
+                    </label>
+                    <label class="modal-retry-scope-row">
+                        <span class="modal-retry-scope-card">
+                            <span class="modal-retry-scope-top">
+                                <input type="radio" name="retry_scope" value="selected">
+                                <span class="modal-retry-scope-title">Só as que eu marquei na tabela.</span>
+                            </span>
+                            <span class="modal-retry-scope-desc">Só entram os envios com quadrinho marcado na lista abaixo (somente a página que você está vendo).</span>
+                        </span>
+                    </label>
+                    <label class="modal-retry-scope-row">
+                        <span class="modal-retry-scope-card">
+                            <span class="modal-retry-scope-top">
+                                <input type="radio" name="retry_scope" value="cause_chip">
+                                <span class="modal-retry-scope-title">Só falhas de chip ou conexão ({{ failure_breakdown.chip_connection }}).</span>
+                            </span>
+                            <span class="modal-retry-scope-desc">Ex.: WhatsApp desconectado ou instância fora do ar. O sistema separa isso pelo texto do erro (é uma estimativa).</span>
+                        </span>
+                    </label>
+                    <label class="modal-retry-scope-row">
+                        <span class="modal-retry-scope-card">
+                            <span class="modal-retry-scope-top">
+                                <input type="radio" name="retry_scope" value="cause_message">
+                                <span class="modal-retry-scope-title">Só falhas de número ou mensagem ({{ failure_breakdown.number_not_exists|default:0|add:failure_breakdown.message_content }}).</span>
+                            </span>
+                            <span class="modal-retry-scope-desc">Ex.: número inválido ou contato sem WhatsApp. Também separado automaticamente pelo texto do erro (estimativa).</span>
+                        </span>
+                    </label>
+                </div>
+            </fieldset>
+
+            <details class="modal-retry-details">
+                <summary class="modal-retry-details-summary">Atalhos: marcar falhas nesta página da tabela</summary>
+                <p class="modal-retry-details-hint">Afeta só a página atual. Depois, no Passo 1, escolha «Só as que eu marquei na tabela».</p>
+                <div class="modal-retry-toolbar">
+                    <button type="button" class="btn-secondary btn-secondary--sm" onclick="retryJobsSelectByCause('chip_connection')">Chip / conexão</button>
+                    <button type="button" class="btn-secondary btn-secondary--sm" onclick="retryJobsSelectByCause('number_not_exists')">Número não existe</button>
+                    <button type="button" class="btn-secondary btn-secondary--sm" onclick="retryJobsSelectByCause('message_content')">Número / conteúdo</button>
+                    <button type="button" class="btn-secondary btn-secondary--sm" onclick="retryJobsSelectFailedPage(true)">Todas falhas da página</button>
+                    <button type="button" class="btn-secondary btn-secondary--sm" onclick="retryJobsSelectFailedPage(false)">Limpar quadrinhos</button>
+                </div>
+            </details>
+
+            <fieldset class="modal-retry-chips-fieldset">
+                <legend class="modal-retry-step-label">Passo 2 — Por quais chips enviar?</legend>
+                <p class="modal-retry-step-hint">Ordem de rodízio: 1.º chip, depois o 2.º, e assim por diante. Desmarque quem não deve enviar. Cada chip usa o horário e os limites já cadastrados nele.</p>
+                {% if evolution_ok and retry_eligible_chips_hidden_offline > 0 %}
+                <p class="modal-retry-step-hint" style="margin-top:.25rem;color:#6d4c41;">
+                    {{ retry_eligible_chips_hidden_offline }} chip(s) elegível(eis) está(ão) desconectado(s) na Evolution e foi(ram) ocultado(s) aqui.
+                </p>
+                {% endif %}
+                <div class="modal-retry-toolbar">
+                    <button type="button" class="btn-secondary btn-secondary--sm" onclick="retryChipsSelectAll(true)">Marcar todos os chips</button>
+                    <button type="button" class="btn-secondary btn-secondary--sm" onclick="retryChipsSelectAll(false)">Limpar chips</button>
+                </div>
+                <div class="modal-retry-list" id="retry-chips-grid">
+                    {% for c in retry_eligible_chips %}
+                    <label class="checkbox-label chip-pick">
+                        <input type="checkbox" name="chip_ids" value="{{ c.pk }}" checked>
+                        <span class="chip-pick__main">
+                            <span class="chip-pick__order" title="Ordem no rodízio">{{ forloop.counter }}.</span>
+                            <span class="chip-pick__name">{{ c.name }}</span>
+                            <code class="chip-pick__inst">{{ c.instance_name }}</code>
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </fieldset>
+
+            <p class="modal-retry-footnote">Ao confirmar, a contagem de tentativas dos envios reagendados volta a <strong>zero</strong>.</p>
+            </div>
+            <div class="form-actions modal-retry-actions">
+                <button type="submit" class="btn-primary">Confirmar reenvio</button>
+                <button type="button" class="btn-secondary" onclick="closeRetryModal()">Cancelar</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{# ── Modal: confirm finishing ── #}
+<div id="modal-finish" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="modal-finish-title">
+    <div class="modal-box">
+        <div class="modal-icon">⚠️</div>
+        <h3 class="modal-title" id="modal-finish-title">Finalizar campanha?</h3>
+        <p class="modal-body">
+            Esta ação <strong>cancela todos os envios pendentes</strong> e marca a campanha como finalizada.<br>
+            Mensagens já enviadas <strong>não são afetadas</strong>.
+        </p>
+        <p class="modal-body" style="color:#e65100;font-size:.88rem;margin-top:.25rem;">
+            Esta ação não pode ser desfeita.
+        </p>
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="closeFinishModal()">Cancelar</button>
+            <form method="post" action="{% url 'campaigns:campaign_action' campaign.pk %}" style="margin:0;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="finish">
+                <button type="submit" class="btn-warning-outline">Sim, finalizar</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.badge {
+    display: inline-block;
+    padding: .2rem .55rem;
+    border-radius: 999px;
+    font-size: .78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.badge-variant {
+    background: #e8eaf6;
+    color: #3949ab;
+}
+.badge-status-pending   { background: #fff3e0; color: #e65100; }
+.badge-status-locked    { background: #e3f2fd; color: #1565c0; }
+.badge-status-waiting_chip { background: #e8eaf6; color: #3949ab; }
+.badge-status-sent      { background: #e8f5e9; color: #2e7d32; }
+.badge-status-failed    { background: #ffebee; color: #c62828; }
+.badge-status-cancelled { background: #f5f5f5; color: #616161; }
+.badge-status-skipped   { background: #f5f5f5; color: #9e9e9e; }
+.send-error-panel {
+    background: #fff3e0;
+    border: 1px solid #ffb74d;
+    border-left: 4px solid #e65100;
+    border-radius: 6px;
+    padding: .45rem .6rem;
+    color: #4e342e;
+    font-size: .78rem;
+    line-height: 1.4;
+}
+.send-error-panel p {
+    margin: 0;
+    line-height: 1.35;
+}
+.attempt-error-details {
+    display: inline;
+}
+.attempt-error-dots {
+    display: inline;
+    cursor: pointer;
+    font-weight: 700;
+    color: #1565c0;
+    list-style: none;
+}
+.attempt-error-dots::-webkit-details-marker {
+    display: none;
+}
+.attempt-error-full {
+    display: block;
+    margin-top: .35rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #424242;
+}
+.btn-active {
+    background: var(--color-primary) !important;
+    color: #fff !important;
+    border-color: transparent !important;
+}
+.campaign-queue-hub {
+    border: 1.5px solid #90a4ae;
+    border-radius: 12px;
+    padding: 1rem 1.15rem 1.1rem;
+    margin: 0 0 1.35rem;
+    background: linear-gradient(165deg, #fafbfc 0%, #eceff1 100%);
+}
+.cqh-title {
+    margin: 0 0 .45rem;
+    font-size: 1.05rem;
+    color: #263238;
+}
+.cqh-lead {
+    margin: 0 0 1rem;
+    font-size: .86rem;
+    line-height: 1.55;
+    color: #37474f;
+}
+.cqh-section {
+    border-top: 1px solid #cfd8dc;
+    padding: .85rem 0 0;
+    margin-top: .85rem;
+}
+.cqh-section:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+    margin-top: 0;
+}
+.cqh-section-title {
+    margin: 0 0 .45rem;
+    font-size: .95rem;
+    color: #37474f;
+}
+.cqh-list {
+    margin: 0 0 .65rem;
+    padding-left: 1.15rem;
+    font-size: .84rem;
+    line-height: 1.55;
+    color: #424242;
+}
+.cqh-p { margin: 0 0 .5rem; font-size: .84rem; line-height: 1.5; color: #424242; }
+.cqh-stat { margin: .35rem 0 .65rem; font-size: .84rem; color: #283593; }
+.cqh-ok {
+    margin: .35rem 0 0;
+    font-size: .84rem;
+    color: #2e7d32;
+    font-weight: 600;
+}
+.cqh-note {
+    margin: .35rem 0 0;
+    font-size: .82rem;
+    line-height: 1.45;
+    color: #5c6bc0;
+}
+.cqh-failure-box {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: .65rem .85rem;
+    margin: .5rem 0 .65rem;
+}
+.cqh-failure-box__title { font-size: .88rem; color: #212121; }
+.cqh-failure-list {
+    margin: .35rem 0 0;
+    padding-left: 1.1rem;
+    font-size: .82rem;
+    line-height: 1.5;
+}
+.cqh-add-chips-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 0.4rem 0.45rem;
+}
+.cqh-add-chip-label.chip-pick {
+    margin: 0;
+    padding: 0.4rem 0.5rem;
+    border-radius: 8px;
+}
+.action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+    align-items: center;
+}
+.action-row form { margin: 0; }
+.redist-waiting-form {
+    margin-top: 0.85rem;
+    padding-top: 1rem;
+    border-top: 1px solid #c5cae9;
+}
+.redist-waiting-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+    gap: 1.25rem 1.75rem;
+    align-items: start;
+}
+@media (max-width: 768px) {
+    .redist-waiting-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.redist-waiting-form select#id_source_chip {
+    max-width: none;
+    width: 100%;
+    box-sizing: border-box;
+}
+.redist-waiting-dest .redist-dest-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 0.4rem 0.45rem;
+}
+.redist-waiting-dest .redist-dest-list label.chip-pick {
+    margin: 0;
+    padding: 0.4rem 0.5rem;
+    border-radius: 8px;
+}
+.redist-waiting-dest .redist-dest-list label.chip-pick input[type="checkbox"] {
+    margin-top: 0.25rem;
+    width: 0.95rem;
+    height: 0.95rem;
+}
+.redist-waiting-dest .chip-pick__name {
+    font-size: 0.8125rem;
+}
+.redist-waiting-dest .chip-pick__inst {
+    font-size: 0.7rem;
+}
+.redist-waiting-dest .chip-pick__main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.12rem;
+}
+.status-pill-finished {
+    display: inline-block;
+    padding: .4rem .9rem;
+    border-radius: 999px;
+    background: #e8f5e9;
+    color: #2e7d32;
+    font-size: .85rem;
+    font-weight: 600;
+}
+
+.btn-retry {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .45rem 1rem;
+    border: 1.5px solid #1565c0;
+    border-radius: 6px;
+    background: #fff;
+    color: #1565c0;
+    font-size: .88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+    text-decoration: none;
+}
+.btn-retry:hover {
+    background: #1565c0;
+    color: #fff;
+}
+.schedule-defer-hint {
+    display: block;
+    margin-top: .28rem;
+    font-size: .78rem;
+    line-height: 1.4;
+    color: #4e342e;
+    max-width: 18rem;
+    font-weight: 600;
+}
+.retry-blocked-msg {
+    display: inline-block;
+    max-width: 28rem;
+    font-size: .82rem;
+    color: #c62828;
+    line-height: 1.45;
+    padding: .35rem 0;
+}
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+.modal-box {
+    background: #fff;
+    border-radius: 14px;
+    padding: 2rem 2rem 1.5rem;
+    max-width: 420px;
+    width: 100%;
+    box-shadow: 0 8px 32px rgba(0,0,0,.18);
+    text-align: center;
+    animation: modal-in .18s ease;
+}
+@keyframes modal-in {
+    from { transform: scale(.93); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+}
+.modal-icon { font-size: 2.4rem; margin-bottom: .5rem; }
+.modal-title { font-size: 1.15rem; font-weight: 700; margin: 0 0 .75rem; color: #212121; }
+.modal-body  { font-size: .9rem; color: #424242; margin: 0 0 .5rem; line-height: 1.6; }
+.modal-actions {
+    display: flex;
+    gap: .75rem;
+    justify-content: center;
+    margin-top: 1.4rem;
+    flex-wrap: wrap;
+}
+.modal-actions form { margin: 0; }
+
+/* Retry: modal width (the .modal-box on this page is limited to 420px) */
+.modal-box.modal-box--retry {
+    max-width: 500px;
+    text-align: left;
+    padding: 1.35rem 1.4rem 1.25rem;
+}
+</style>
+
+<script>
+function retryChipsSelectAll(checked) {
+    var g = document.getElementById('retry-chips-grid');
+    if (!g) return;
+    g.querySelectorAll('input[type="checkbox"][name="chip_ids"]').forEach(function(el) {
+        el.checked = checked;
+    });
+}
+function retryJobsSelectFailedPage(checked) {
+    document.querySelectorAll('.retry-job-cb').forEach(function(el) {
+        el.checked = checked;
+    });
+    var h = document.getElementById('retry-select-all-page');
+    if (h) h.checked = checked && document.querySelectorAll('.retry-job-cb').length > 0;
+}
+function retryJobsSelectByCause(cause) {
+    document.querySelectorAll('.retry-job-cb').forEach(function(el) {
+        el.checked = (el.getAttribute('data-cause') === cause);
+    });
+    syncRetrySelectAllHeader();
+}
+function syncRetrySelectAllHeader() {
+    var boxes = document.querySelectorAll('.retry-job-cb');
+    var h = document.getElementById('retry-select-all-page');
+    if (!h || boxes.length === 0) return;
+    var all = true;
+    var any = false;
+    boxes.forEach(function(el) {
+        if (el.checked) any = true;
+        if (!el.checked) all = false;
+    });
+    h.checked = all && any;
+}
+function openRetryModal() {
+    var m = document.getElementById('modal-retry');
+    if (!m) return;
+    m.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    var rb = m.querySelector('.modal-retry-body');
+    if (rb) rb.scrollTop = 0;
+}
+function closeRetryModal() {
+    var m = document.getElementById('modal-retry');
+    if (!m) return;
+    m.style.display = 'none';
+    document.body.style.overflow = '';
+}
+var _modalRetry = document.getElementById('modal-retry');
+if (_modalRetry) _modalRetry.addEventListener('click', function(e) {
+    if (e.target === this) closeRetryModal();
+});
+document.addEventListener('change', function(e) {
+    if (e.target && e.target.id === 'retry-select-all-page') {
+        retryJobsSelectFailedPage(e.target.checked);
+    } else if (e.target && e.target.classList.contains('retry-job-cb')) {
+        syncRetrySelectAllHeader();
+    }
+});
+(function() {
+    var form = document.getElementById('form-retry-failed');
+    if (!form) return;
+    form.addEventListener('submit', function(e) {
+        var chips = form.querySelectorAll('input[name="chip_ids"]:checked');
+        if (chips.length < 1) {
+            e.preventDefault();
+            alert('Marque ao menos um chip para o reenvio.');
+            return;
+        }
+        var scopeRadio = form.querySelector('input[name="retry_scope"]:checked');
+        var scope = scopeRadio ? scopeRadio.value : 'all';
+        var hiddenBox = document.getElementById('retry-job-ids-hidden');
+        if (hiddenBox) hiddenBox.innerHTML = '';
+        if (scope === 'selected') {
+            var checked = document.querySelectorAll('.retry-job-cb:checked');
+            if (checked.length < 1) {
+                e.preventDefault();
+                alert('Marque ao menos uma falha na tabela, ou no Passo 1 escolha outra opção que não seja «Só as que eu marquei na tabela».');
+                return;
+            }
+            if (hiddenBox) {
+                checked.forEach(function(cb) {
+                    var inp = document.createElement('input');
+                    inp.type = 'hidden';
+                    inp.name = 'retry_job_ids';
+                    inp.value = cb.value;
+                    hiddenBox.appendChild(inp);
+                });
+            }
+        }
+    });
+})();
+
+(function() {
+    var sel = document.getElementById('id_source_chip');
+    var labels = document.querySelectorAll('.redist-dest-label');
+    if (!sel || !labels.length) return;
+    function syncRedistDestVisibility() {
+        var sid = String(sel.value);
+        labels.forEach(function(lab) {
+            var id = String(lab.getAttribute('data-dest-chip-id') || '');
+            var hide = id === sid;
+            lab.style.display = hide ? 'none' : '';
+            if (hide) {
+                var cb = lab.querySelector('input[type="checkbox"]');
+                if (cb) cb.checked = false;
+            }
+        });
+    }
+    sel.addEventListener('change', syncRedistDestVisibility);
+    syncRedistDestVisibility();
+})();
+(function() {
+    var form = document.getElementById('form-redistribute-waiting');
+    if (!form) return;
+    form.addEventListener('submit', function(e) {
+        var n = form.querySelectorAll('#redist-dest-chips input[name="dest_chip_ids"]:checked').length;
+        if (n < 1) {
+            e.preventDefault();
+            alert('Marque ao menos um chip de destino.');
+        }
+    });
+})();
+(function() {
+    var form = document.getElementById('form-add-campaign-chips');
+    if (!form) return;
+    form.addEventListener('submit', function(e) {
+        var n = form.querySelectorAll('input[name="add_chip_ids"]:checked').length;
+        if (n < 1) {
+            e.preventDefault();
+            alert('Marque ao menos um chip para adicionar à campanha.');
+        }
+    });
+})();
+
+function openFinishModal() {
+    var m = document.getElementById('modal-finish');
+    m.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+function closeFinishModal() {
+    var m = document.getElementById('modal-finish');
+    m.style.display = 'none';
+    document.body.style.overflow = '';
+}
+document.getElementById('modal-finish').addEventListener('click', function(e) {
+    if (e.target === this) closeFinishModal();
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { closeFinishModal(); closeRetryModal(); }
+});
+</script>
+{% endblock %}

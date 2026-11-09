@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Excluir chip - AutoSendMessage{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Excluir chip</h2>
+        <a href="{% url 'dashboards:home' %}" class="btn-secondary">Voltar</a>
+    </div>
+    <div class="section-body">
+        <div class="alert alert-warning">
+            Tem certeza que deseja excluir o chip <strong>{{ chip.name }}</strong>?
+        </div>
+        <form action="{% url 'chips:chip_delete' chip.pk %}" method="post" class="form-actions form-actions-delete">
+            {% csrf_token %}
+            <button type="submit" class="btn-primary">Confirmar exclusão</button>
+            <a href="{% url 'dashboards:home' %}" class="btn-secondary">Cancelar</a>
+        </form>
+    </div>
+</section>
+{% endblock %}
+

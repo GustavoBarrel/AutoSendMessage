@@ -1,0 +1,574 @@
+{% extends "base.html" %}
+{% block title %}Mensagens — {{ campaign.name }}{% endblock %}
+{% block content %}
+<section class="section section--wide">
+    <div class="section-header">
+        <h2 class="section-title">{{ campaign.name }}</h2>
+        <div class="section-actions">
+            <a href="{% url 'campaigns:campaign_list' %}" class="btn-link">Campanhas</a>
+            <a href="{% url 'campaigns:campaign_detail' campaign.pk %}" class="btn-secondary">Painel</a>
+        </div>
+    </div>
+    <div class="section-body">
+        {% include "campaigns/wizard_steps.html" with wizard_step=wizard_step %}
+
+        <div class="msg-wizard-intro">
+            <p>Defina até <strong>3 variações</strong> de mensagem — o sistema alterna entre elas automaticamente nos envios.</p>
+            <ul class="msg-wizard-tips">
+                <li>Use os campos personalizados abaixo para montar mensagens mais naturais.</li>
+                <li><strong>Texto + imagem/vídeo:</strong> selecione o tipo "Imagem" ou "Vídeo" e o texto funciona como <em>legenda</em>.</li>
+                <li>Tipos suportados: <strong>Texto</strong> puro · <strong>Imagem</strong> com ou sem legenda · <strong>Vídeo</strong> com ou sem legenda.</li>
+            </ul>
+            <div class="msg-placeholder-box">
+                <strong>Campos disponíveis:</strong>
+                <div class="msg-placeholder-list">
+                    <code>{nome}</code>
+                    <code>{nome_completo}</code>
+                    <code>{primeiro_nome}</code>
+                    <code>{ultimo_nome}</code>
+                    <code>{celular}</code>
+                    <code>{cidade}</code>
+                    <code>{bairro}</code>
+                    <code>{uf}</code>
+                    <code>{categoria}</code>
+                    <code>{subcategoria}</code>
+                    <code>{sexo}</code>
+                    <code>{email}</code>
+                </div>
+            </div>
+        </div>
+
+        <form method="post" class="form-perfil" enctype="multipart/form-data">
+            {% csrf_token %}
+
+            {# ── Shared media ── #}
+            <div class="msg-shared-block">
+                <div class="msg-shared-header">
+                    <span class="msg-shared-icon">🖼</span>
+                    <strong>Mídia compartilhada</strong>
+                    <span class="msg-label-hint">— use a mesma imagem/vídeo nas 3 variações (opcional)</span>
+                </div>
+                <div class="msg-shared-body">
+                    <div class="msg-type-row" style="margin-bottom:.75rem;">
+                        <label class="msg-type-option" for="shared_message_type_text">
+                            <input type="radio" name="shared_message_type" id="shared_message_type_text" value=""
+                                {% if not shared_message_type_post %}checked{% endif %} onchange="syncShared()">
+                            <span class="msg-type-icon">💬</span><span>Sem mídia compartilhada</span>
+                        </label>
+                        <label class="msg-type-option" for="shared_message_type_image">
+                            <input type="radio" name="shared_message_type" id="shared_message_type_image" value="image"
+                                {% if shared_message_type_post == 'image' %}checked{% endif %} onchange="syncShared()">
+                            <span class="msg-type-icon">🖼</span><span>Imagem</span>
+                        </label>
+                        <label class="msg-type-option" for="shared_message_type_video">
+                            <input type="radio" name="shared_message_type" id="shared_message_type_video" value="video"
+                                {% if shared_message_type_post == 'video' %}checked{% endif %} onchange="syncShared()">
+                            <span class="msg-type-icon">🎬</span><span>Vídeo</span>
+                        </label>
+                    </div>
+                    <div id="shared-media-fields" style="display:none;">
+                        <div class="msg-upload-area" id="upload-area-shared"
+                             ondragover="event.preventDefault()" ondrop="handleDropShared(event)">
+                            <input type="file" name="shared_media_file" id="shared_media_file"
+                                accept="image/*,video/*" class="msg-file-input"
+                                onchange="previewShared(this)">
+                            <label for="shared_media_file" class="msg-upload-label">
+                                <span class="msg-upload-icon">📎</span>
+                                <span class="msg-upload-text">Clique ou arraste o arquivo aqui</span>
+                                <span class="msg-upload-sub">JPG, JPEG, JFIF, PNG, GIF, WEBP, HEIC, MP4, MOV, M4V, WEBM, 3GP</span>
+                            </label>
+                            <div class="msg-upload-preview" id="preview-shared" style="display:none;"></div>
+                        </div>
+                        <div class="form-group" style="margin-top:.6rem;">
+                            <label for="shared_media_url">Ou informe a URL pública <span class="msg-label-hint">(substitui o upload)</span></label>
+                            <input type="url" name="shared_media_url" id="shared_media_url" maxlength="800"
+                                class="form-control" placeholder="https://…"
+                                value="{{ shared_media_url_post }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="msg-variants-grid">
+                {% for n, label, obrig, disp in variants_data %}
+                {# disp = values already merged (POST + database) on the server #}
+                {% with message_type_val=disp.message_type text_val=disp.text media_val=disp.media %}
+                <div class="msg-variant-card" id="card-{{ n }}">
+                    <div class="msg-variant-header">
+                        <span class="msg-variant-num">{{ n }}</span>
+                        <span class="msg-variant-title">Variação {{ n }}</span>
+                        <span class="msg-variant-badge {% if obrig %}msg-badge-required{% else %}msg-badge-optional{% endif %}">
+                            {% if obrig %}Obrigatória{% else %}Opcional — copia a variação 1 se vazia{% endif %}
+                        </span>
+                    </div>
+
+                    <div class="msg-variant-body">
+                        <div class="msg-shared-active-hint" style="display:none;">
+                            <span>🖼 Usando mídia compartilhada — edite apenas a legenda abaixo.</span>
+                        </div>
+                        {# Type #}
+                        <div class="msg-type-row">
+                            {% for val, tlabel in message_type_choices %}
+                            <label class="msg-type-option" for="message_type_{{ n }}_{{ val }}">
+                                <input type="radio" name="message_type_{{ n }}" id="message_type_{{ n }}_{{ val }}" value="{{ val }}"
+                                    {% if message_type_val == val %}checked{% elif not message_type_val and val == 'text' %}checked{% endif %}
+                                    onchange="syncVariant({{ n }})">
+                                <span class="msg-type-icon">
+                                    {% if val == 'text' %}💬{% elif val == 'image' %}🖼{% else %}🎬{% endif %}
+                                </span>
+                                <span>{{ tlabel }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+
+                        {# Text #}
+                        <div class="form-group msg-textarea-group">
+                            <label for="id_text_{{ n }}">
+                                Texto da mensagem
+                                <span class="msg-label-hint" id="label-legenda-{{ n }}" style="display:none;">(legenda)</span>
+                            </label>
+                            <textarea name="text_{{ n }}" id="id_text_{{ n }}" rows="7"
+                                class="form-control msg-textarea"
+                                placeholder="Olá {primeiro_nome}, …">{{ text_val }}</textarea>
+                            <div class="msg-insert-fields" aria-label="Inserir campo personalizado">
+                                <button type="button" onclick="insertPlaceholder('id_text_{{ n }}', '{primeiro_nome}')">+ primeiro nome</button>
+                                <button type="button" onclick="insertPlaceholder('id_text_{{ n }}', '{nome_completo}')">+ nome completo</button>
+                                <button type="button" onclick="insertPlaceholder('id_text_{{ n }}', '{ultimo_nome}')">+ último nome</button>
+                                <button type="button" onclick="insertPlaceholder('id_text_{{ n }}', '{cidade}')">+ cidade</button>
+                                <button type="button" onclick="insertPlaceholder('id_text_{{ n }}', '{bairro}')">+ bairro</button>
+                                <button type="button" onclick="insertPlaceholder('id_text_{{ n }}', '{uf}')">+ UF</button>
+                                <button type="button" onclick="insertPlaceholder('id_text_{{ n }}', '{categoria}')">+ categoria</button>
+                                <button type="button" onclick="insertPlaceholder('id_text_{{ n }}', '{subcategoria}')">+ subcategoria</button>
+                                <button type="button" onclick="insertPlaceholder('id_text_{{ n }}', '{sexo}')">+ sexo</button>
+                                <button type="button" onclick="insertPlaceholder('id_text_{{ n }}', '{celular}')">+ celular</button>
+                                <button type="button" onclick="insertPlaceholder('id_text_{{ n }}', '{email}')">+ email</button>
+                            </div>
+                        </div>
+
+                        {# Media (image/video) #}
+                        <div class="msg-media-section" id="media-section-{{ n }}" style="display:none;">
+                            <div class="form-group">
+                                <label>Arquivo de mídia</label>
+                                <div class="msg-upload-area" id="upload-area-{{ n }}"
+                                     ondragover="event.preventDefault()" ondrop="handleDrop(event, {{ n }})">
+                                    <input type="file" name="media_file_{{ n }}" id="media_file_{{ n }}"
+                                        accept="image/*,video/*" class="msg-file-input"
+                                        onchange="previewMedia({{ n }}, this)">
+                                    <label for="media_file_{{ n }}" class="msg-upload-label">
+                                        <span class="msg-upload-icon">📎</span>
+                                        <span class="msg-upload-text">Clique para selecionar ou arraste o arquivo aqui</span>
+                                        <span class="msg-upload-sub">JPG, JPEG, JFIF, PNG, GIF, WEBP, HEIC, MP4, MOV, M4V, WEBM, 3GP</span>
+                                    </label>
+                                    <div class="msg-upload-preview" id="preview-{{ n }}" style="display:none;"></div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="id_media_{{ n }}">
+                                    Ou informe a URL pública do arquivo
+                                    <span class="msg-label-hint">(substitui o upload acima)</span>
+                                </label>
+                                <input type="url" name="media_{{ n }}" id="id_media_{{ n }}"
+                                    maxlength="800" class="form-control"
+                                    value="{{ media_val }}"
+                                    placeholder="https://…">
+                                {% if media_val %}
+                                <div class="msg-current-media">
+                                    <span class="msg-label-hint">Atual:</span>
+                                    <a href="{{ media_val }}" target="_blank" rel="noopener" class="msg-media-link">{{ media_val|truncatechars:60 }}</a>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endwith %}
+                {% endfor %}
+            </div>
+
+            <div class="form-actions" style="margin-top:2rem;">
+                <button type="submit" class="btn-primary">Salvar e ir ao painel</button>
+                <a href="{% url 'campaigns:campaign_wizard' campaign.pk 'chips' %}" class="btn-secondary">← Voltar: chips</a>
+            </div>
+        </form>
+    </div>
+</section>
+
+<style>
+.section--wide {
+    max-width: 1440px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+}
+
+.msg-shared-block {
+    border: 2px solid #e3f2fd;
+    border-radius: 10px;
+    background: #f8fbff;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+.msg-shared-header {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin-bottom: .75rem;
+    font-size: .92rem;
+}
+.msg-shared-icon { font-size: 1.2rem; }
+.msg-shared-body {}
+.msg-shared-active-hint {
+    background: #e3f2fd;
+    border-radius: 6px;
+    padding: .4rem .75rem;
+    font-size: .82rem;
+    color: #1565c0;
+    margin-bottom: .75rem;
+}
+
+.msg-wizard-intro {
+    background: #f0f4ff;
+    border-left: 4px solid #3949ab;
+    border-radius: 0 8px 8px 0;
+    padding: .85rem 1.1rem;
+    margin-bottom: 1.5rem;
+}
+.msg-wizard-intro p { margin: 0 0 .4rem; font-size: .92rem; }
+.msg-wizard-tips {
+    margin: 0;
+    padding-left: 1.2rem;
+    font-size: .85rem;
+    color: #424242;
+    line-height: 1.7;
+}
+.msg-placeholder-box {
+    margin-top: .75rem;
+    font-size: .82rem;
+}
+.msg-placeholder-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    margin-top: .4rem;
+}
+.msg-placeholder-list code {
+    background: #fff;
+    border: 1px solid #d6dcff;
+    border-radius: 999px;
+    color: #303f9f;
+    padding: .15rem .45rem;
+}
+
+.msg-variants-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    width: 100%;
+}
+@media (max-width: 1100px) {
+    .msg-variants-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 680px) {
+    .msg-variants-grid { grid-template-columns: 1fr; }
+}
+
+.msg-variant-card {
+    border: 1.5px solid #e0e0e0;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.msg-variant-header {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .7rem 1rem;
+    background: #f5f5f5;
+    border-bottom: 1px solid #e0e0e0;
+}
+.msg-variant-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: #fff;
+    font-weight: 700;
+    font-size: .85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.msg-variant-title {
+    font-weight: 600;
+    font-size: .9rem;
+    flex: 1;
+}
+.msg-variant-badge {
+    font-size: .72rem;
+    padding: .15rem .55rem;
+    border-radius: 999px;
+    font-weight: 600;
+}
+.msg-badge-required { background: var(--color-primary-soft); color: var(--color-primary-hover); }
+.msg-badge-optional { background: #e8f5e9; color: #2e7d32; }
+
+.msg-variant-body { padding: 1rem; }
+
+.msg-type-row {
+    display: flex;
+    gap: .5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+.msg-type-option {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .35rem .75rem;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .82rem;
+    font-weight: 500;
+    transition: border-color .15s, background .15s;
+    user-select: none;
+}
+.msg-type-option input[type=radio] { display: none; }
+.msg-type-option:has(input:checked) {
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft);
+    color: var(--color-primary-hover);
+}
+.msg-type-icon { font-size: 1rem; }
+
+.msg-textarea-group { display: flex; flex-direction: column; gap: .4rem; }
+.msg-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: inherit;
+    font-size: .92rem;
+    line-height: 1.6;
+    resize: vertical;
+    min-height: 160px;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    padding: .75rem 1rem;
+    background: #fafafa;
+    transition: border-color .15s, box-shadow .15s;
+    outline: none;
+}
+.msg-textarea:focus {
+    border-color: var(--color-primary);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), .12);
+}
+.msg-insert-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+}
+.msg-insert-fields button {
+    padding: .28rem .65rem;
+    border: 1px solid #d6dcff;
+    border-radius: 999px;
+    background: #f6f7ff;
+    color: #303f9f;
+    font-size: .8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+}
+.msg-insert-fields button:hover {
+    background: #e9ecff;
+    border-color: var(--color-primary);
+    color: var(--color-primary-hover);
+}
+
+.msg-label-hint {
+    font-weight: 400;
+    font-size: .78rem;
+    color: #757575;
+}
+.msg-variant-body .form-control {
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    padding: .6rem .9rem;
+    background: #fafafa;
+    transition: border-color .15s, box-shadow .15s;
+    outline: none;
+}
+.msg-variant-body .form-control:focus {
+    border-color: var(--color-primary);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), .12);
+}
+
+.msg-media-section { margin-top: .75rem; }
+
+.msg-upload-area {
+    position: relative;
+    border: 2px dashed #bdbdbd;
+    border-radius: 8px;
+    background: #fafafa;
+    text-align: center;
+    padding: 1.2rem .75rem;
+    transition: border-color .15s, background .15s;
+    cursor: pointer;
+}
+.msg-upload-area:hover { border-color: var(--color-primary); background: rgba(var(--color-primary-rgb), 0.13); }
+.msg-file-input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+}
+.msg-upload-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .3rem;
+    cursor: pointer;
+    pointer-events: none;
+}
+.msg-upload-icon { font-size: 1.6rem; }
+.msg-upload-text { font-size: .85rem; font-weight: 500; color: #424242; }
+.msg-upload-sub { font-size: .75rem; color: #9e9e9e; }
+.msg-upload-preview {
+    margin-top: .75rem;
+}
+.msg-upload-preview img, .msg-upload-preview video {
+    max-width: 100%;
+    max-height: 140px;
+    border-radius: 6px;
+    object-fit: contain;
+}
+.msg-upload-preview .preview-name {
+    font-size: .8rem;
+    color: #424242;
+    margin-top: .3rem;
+}
+.msg-current-media {
+    margin-top: .35rem;
+    font-size: .8rem;
+    word-break: break-all;
+}
+.msg-media-link { color: #1565c0; }
+</style>
+
+<script>
+function syncVariant(n) {
+    var messageType = document.querySelector('input[name="message_type_' + n + '"]:checked');
+    if (!messageType) return;
+    var v = messageType.value;
+    var mediaSection = document.getElementById('media-section-' + n);
+    var legendaLabel = document.getElementById('label-legenda-' + n);
+    if (v === 'text') {
+        mediaSection.style.display = 'none';
+        if (legendaLabel) legendaLabel.style.display = 'none';
+    } else {
+        mediaSection.style.display = 'block';
+        if (legendaLabel) legendaLabel.style.display = 'inline';
+    }
+}
+
+function insertPlaceholder(id, token) {
+    var ta = document.getElementById(id);
+    if (!ta) return;
+    var start = ta.selectionStart, end = ta.selectionEnd;
+    ta.value = ta.value.substring(0, start) + token + ta.value.substring(end);
+    ta.selectionStart = ta.selectionEnd = start + token.length;
+    ta.focus();
+}
+
+function insertName(id) {
+    insertPlaceholder(id, '{nome}');
+}
+
+function previewMedia(n, input) {
+    var prev = document.getElementById('preview-' + n);
+    if (!prev || !input.files || !input.files[0]) return;
+    var file = input.files[0];
+    var url = URL.createObjectURL(file);
+    var html = '';
+    if (file.type.startsWith('image/')) {
+        html = '<img src="' + url + '" alt="preview">';
+    } else if (file.type.startsWith('video/')) {
+        html = '<video src="' + url + '" controls></video>';
+    }
+    prev.innerHTML = html;
+    var nameEl = document.createElement('div');
+    nameEl.className = 'preview-name';
+    nameEl.textContent = file.name;  // file names are not trusted markup
+    prev.appendChild(nameEl);
+    prev.style.display = 'block';
+    document.getElementById('upload-area-' + n).style.borderColor = 'var(--color-primary)';
+}
+
+function handleDrop(event, n) {
+    event.preventDefault();
+    var input = document.getElementById('media_file_' + n);
+    if (!input || !event.dataTransfer.files.length) return;
+    input.files = event.dataTransfer.files;
+    previewMedia(n, input);
+}
+
+function syncShared() {
+    var messageType = document.querySelector('input[name="shared_message_type"]:checked');
+    var fields = document.getElementById('shared-media-fields');
+    var usingShared = messageType && messageType.value !== '';
+    fields.style.display = usingShared ? 'block' : 'none';
+
+    // When shared media is active: hide the type and the per-variant media section
+    [1, 2, 3].forEach(function (n) {
+        var typeRow = document.querySelector('#card-' + n + ' .msg-type-row');
+        var mediaSection = document.getElementById('media-section-' + n);
+        var legendaLabel = document.getElementById('label-legenda-' + n);
+        var hint = document.querySelector('#card-' + n + ' .msg-shared-active-hint');
+        if (usingShared) {
+            if (typeRow) typeRow.style.display = 'none';
+            if (mediaSection) mediaSection.style.display = 'none';
+            if (legendaLabel) legendaLabel.style.display = 'inline';
+            if (hint) hint.style.display = 'block';
+        } else {
+            if (typeRow) typeRow.style.display = '';
+            if (hint) hint.style.display = 'none';
+            syncVariant(n);
+        }
+    });
+}
+
+function previewShared(input) {
+    var prev = document.getElementById('preview-shared');
+    if (!prev || !input.files || !input.files[0]) return;
+    var file = input.files[0];
+    var url = URL.createObjectURL(file);
+    var html = file.type.startsWith('image/')
+        ? '<img src="' + url + '" alt="preview">'
+        : '<video src="' + url + '" controls></video>';
+    prev.innerHTML = html;
+    var nameEl = document.createElement('div');
+    nameEl.className = 'preview-name';
+    nameEl.textContent = file.name;  // file names are not trusted markup
+    prev.appendChild(nameEl);
+    prev.style.display = 'block';
+    document.getElementById('upload-area-shared').style.borderColor = 'var(--color-primary)';
+}
+
+function handleDropShared(event) {
+    event.preventDefault();
+    var input = document.getElementById('shared_media_file');
+    if (!input || !event.dataTransfer.files.length) return;
+    input.files = event.dataTransfer.files;
+    previewShared(input);
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    [1, 2, 3].forEach(function (n) { syncVariant(n); });
+    syncShared();
+});
+</script>
+{% endblock %}

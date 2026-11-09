@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Resolver duplicatas - Importar contatos{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Celulares repetidos na planilha</h2>
+        <a href="{% url 'contacts:contact_list' %}" class="btn-secondary">Cancelar importação</a>
+    </div>
+    <div class="section-body">
+        {% include "contacts/import_wizard_steps.html" with wizard_step=4 wizard_has_dup=True wizard_dup_skipped=False %}
+        <p class="form-info">O mesmo celular aparece mais de uma vez no arquivo. Escolha qual linha manter para cada celular (apenas uma por número).</p>
+        <form method="post" class="form-perfil">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="alert alert-warning">{{ form.non_field_errors }}</div>
+            {% endif %}
+            <div class="duplicatas-grupos">
+                {% for field in form %}
+                <div class="duplicata-grupo">
+                    <h3 class="duplicata-celular">{{ field.label }}</h3>
+                    <div class="form-group">
+                        {{ field }}
+                        {{ field.errors }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Continuar</button>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %}

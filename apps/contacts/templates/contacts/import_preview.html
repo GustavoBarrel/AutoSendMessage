@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Preview - Importar contatos{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Preview da importação</h2>
+        <a href="{% url 'contacts:contacts_import_map' %}" class="btn-secondary">Voltar ao mapeamento</a>
+    </div>
+    <div class="section-body">
+        {% include "contacts/import_wizard_steps.html" with wizard_step=3 wizard_has_dup=duplicate_groups %}
+        <div class="preview-cards">
+            <div class="preview-card">
+                <span class="preview-card-label">Total no arquivo</span>
+                <span class="preview-card-value">{{ count_total }}</span>
+            </div>
+            <div class="preview-card">
+                <span class="preview-card-label">Linhas válidas</span>
+                <span class="preview-card-value">{{ valid_count }}</span>
+                <span class="preview-card-hint">prontas para importar</span>
+            </div>
+            <div class="preview-card preview-card--error">
+                <span class="preview-card-label">Com erro</span>
+                <span class="preview-card-value">{{ error_count }}</span>
+                <span class="preview-card-hint">corrija no arquivo</span>
+            </div>
+            <div class="preview-card preview-card--dup">
+                <span class="preview-card-label">Duplicados no arquivo</span>
+                <span class="preview-card-value">{{ dup_count }}</span>
+                <span class="preview-card-hint">escolha qual manter</span>
+            </div>
+            <div class="preview-card">
+                <span class="preview-card-label">Serão importados (novos)</span>
+                <span class="preview-card-value">{% if new_count is None %}—{% else %}{{ new_count }}{% endif %}</span>
+                {% if new_count is None %}<span class="preview-card-hint">após resolver duplicatas</span>{% endif %}
+            </div>
+            <div class="preview-card">
+                <span class="preview-card-label">Já no sistema (iguais)</span>
+                <span class="preview-card-value">{% if ignored_count is None %}—{% else %}{{ ignored_count }}{% endif %}</span>
+                {% if ignored_count is None %}<span class="preview-card-hint">após resolver duplicatas</span>{% endif %}
+            </div>
+            <div class="preview-card">
+                <span class="preview-card-label">Já existe no sistema porém com divergência (decisão)</span>
+                <span class="preview-card-value">{% if divergences_count is None %}—{% else %}{{ divergences_count }}{% endif %}</span>
+                {% if divergences_count is None %}<span class="preview-card-hint">após resolver duplicatas</span>{% endif %}
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="preview-search">Buscar</label>
+            <div class="search-input">
+                <span class="search-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18" focusable="false" aria-hidden="true">
+                        <path d="M10.5 3a7.5 7.5 0 1 0 4.55 13.45l3.5 3.5a1 1 0 0 0 1.41-1.41l-3.5-3.5A7.5 7.5 0 0 0 10.5 3Zm0 2a5.5 5.5 0 1 1 0 11a5.5 5.5 0 0 1 0-11Z" />
+                    </svg>
+                </span>
+                <input id="preview-search" type="text" placeholder="Buscar por celular ou nome..." class="input-search" autocomplete="off" />
+                <button type="button" class="search-clear" id="preview-search-clear" title="Limpar" aria-label="Limpar busca">×</button>
+            </div>
+        </div>
+
+        <div class="form-actions" style="margin-top: 0;">
+            <form method="post" class="form-perfil" id="preview-form">
+            {% csrf_token %}
+                <button type="submit" class="btn-primary">Continuar</button>
+            </form>
+        </div>
+
+        {% if rows %}
+        <div class="table-scroll">
+        <table class="table-perfis" id="preview-table">
+            <thead>
+                <tr>
+                    <th>Celular</th>
+                    <th>Nome</th>
+                    <th>WhatsApp</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td><code>{{ row.mobile_phone }}</code></td>
+                    <td>{{ row.name|default:"—" }}</td>
+                    <td>{% if row.has_whatsapp %}<span class="badge-ativo">Sim</span>{% else %}<span class="badge-inativo">Não</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="icon">⚠️</div>
+            <p>Nenhuma linha válida encontrada para importar.</p>
+        </div>
+        {% endif %}
+
+        {% if duplicate_groups %}
+        <div class="import-duplicados-block">
+            <div class="import-duplicados-header">
+                <h3 class="import-duplicados-title">Duplicados — não serão importados</h3>
+                <span class="import-duplicados-badge">Cada celular só pode ter 1 registro</span>
+            </div>
+            <p class="import-duplicados-hint">O mesmo celular aparece mais de uma vez no arquivo. Ao clicar em Continuar, você escolherá qual linha manter para cada um. As demais ficam de fora.</p>
+            <div class="duplicados-list">
+                {% for g in duplicate_groups %}
+                <div class="duplicado-card">
+                    <div class="duplicado-card-header">
+                        <code class="duplicado-celular">{{ g.mobile_phone }}</code>
+                        <span class="duplicado-qtd">{{ g.count }} ocorrência(s) — igual entre si</span>
+                    </div>
+                    <ul class="duplicado-ocorrencias">
+                        {% for o in g.occurrences %}
+                        <li>Linha {{ o.row }}: {{ o.name }} — WhatsApp {% if o.has_whatsapp %}Sim{% else %}Não{% endif %}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if errors %}
+        <div class="import-errors-block">
+            <div class="import-errors-header">
+                <h3 class="import-errors-title">Erros — resolver antes de importar</h3>
+                <span class="import-errors-badge">{{ error_count }}</span>
+            </div>
+            <p class="import-errors-hint">Estas linhas têm problema (ex.: celular vazio, data inválida). Para importar o máximo possível, corrija no arquivo e reenviе.</p>
+            <div class="table-scroll">
+            <table class="table-perfis">
+                <thead>
+                    <tr>
+                        <th>Linha</th>
+                        <th>Celular</th>
+                        <th>Motivo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for e in errors %}
+                    <tr class="preview-error-row">
+                        <td>{{ e.row }}</td>
+                        <td>{{ e.mobile_phone|default:"—" }}</td>
+                        <td>{{ e.reason }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <script>
+          (function () {
+            var table = document.getElementById('preview-table');
+            var search = document.getElementById('preview-search');
+            var clearBtn = document.getElementById('preview-search-clear');
+
+            if (search && table) {
+              function applyFilter() {
+                var q = (search.value || '').toLowerCase();
+                var rows = table.querySelectorAll('tbody tr');
+                rows.forEach(function (tr) {
+                  var text = tr.innerText.toLowerCase();
+                  tr.style.display = text.indexOf(q) >= 0 ? '' : 'none';
+                });
+                if (clearBtn) clearBtn.style.visibility = q ? 'visible' : 'hidden';
+              }
+              search.addEventListener('input', applyFilter);
+              if (clearBtn) {
+                clearBtn.addEventListener('click', function () {
+                  search.value = '';
+                  search.focus();
+                  applyFilter();
+                });
+                clearBtn.style.visibility = 'hidden';
+              }
+            }
+          })();
+        </script>
+    </div>
+</section>
+{% endblock %}
+

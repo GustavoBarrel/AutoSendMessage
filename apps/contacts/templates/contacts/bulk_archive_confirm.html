@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Arquivar contatos - AutoSendMessage{% endblock %}
+{% block content %}
+<section class="section">
+    <div class="section-header">
+        <h2 class="section-title">Arquivar {{ total }} contato{{ total|pluralize }}?</h2>
+    </div>
+    <div class="section-body bulk-confirm">
+        {% if covers_all_active %}
+        <div class="alert alert-warning" role="alert">
+            <strong>A seleção inclui todos os contatos ativos da base.</strong>
+            Depois de arquivar, a lista de contatos fica vazia até a próxima importação.
+        </div>
+        {% endif %}
+
+        <p class="bulk-confirm__lead">
+            Os contatos arquivados saem da lista e não entram em novas campanhas.
+            O histórico de envios continua nas estatísticas.
+            <strong>Não há como desarquivar pela interface.</strong>
+        </p>
+
+        <h3 class="bulk-confirm__subtitle">Na seleção</h3>
+        <ul class="bulk-confirm__sample" id="bulk-archive-preview">
+            {% for label in preview %}
+            <li>{{ label }}</li>
+            {% endfor %}
+        </ul>
+        {% if remaining %}
+        <p class="bulk-confirm__more">e mais {{ remaining }} contato{{ remaining|pluralize }}.</p>
+        {% endif %}
+        {% if ignored %}
+        <p class="bulk-confirm__more">{{ ignored }} contato{{ ignored|pluralize }} da seleção já {{ ignored|pluralize:"estava,estavam" }} arquivado{{ ignored|pluralize }} ou não existe{{ ignored|pluralize:",m" }} mais e {{ ignored|pluralize:"vai,vão" }} ser ignorado{{ ignored|pluralize }}.</p>
+        {% endif %}
+
+        {% if total_pending %}
+        <div class="alert alert-warning" role="alert">
+            <strong>{{ total_pending }} envio{{ total_pending|pluralize }} pendente{{ total_pending|pluralize }} {{ total_pending|pluralize:"será cancelado,serão cancelados" }}.</strong>
+            <ul class="bulk-confirm__campaigns">
+                {% for c in campaigns_affected %}
+                <li>{{ c.name }}: {{ c.count }} envio{{ c.count|pluralize }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="bulk-confirm__actions">
+            <form method="post" id="bulk-archive-confirm-form" action="{% url 'contacts:contact_bulk_archive_confirm' %}">
+                {% csrf_token %}
+                <input type="hidden" name="contact_ids" value="{{ contact_ids_csv }}" />
+                <input type="hidden" name="next" value="{{ next_url }}" />
+                <button type="submit" class="btn-danger">
+                    Sim, arquivar {{ total }} contato{{ total|pluralize }}{% if total_pending %} e cancelar {{ total_pending }} envio{{ total_pending|pluralize }}{% endif %}
+                </button>
+            </form>
+            <a href="{{ next_url }}" class="btn-secondary">Voltar sem arquivar</a>
+        </div>
+    </div>
+</section>
+{% endblock %}
